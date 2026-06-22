@@ -1,0 +1,29 @@
+# Audit-only dependencies. Installed alongside the core env (Python 3.12).
+# Kept separate from the repo's root requirements.txt so the core RDS+ pipeline
+# environment stays untouched (ground rule: extend, don't rewrite).
+#
+#   pip install -r audit/requirements-audit.txt
+
+# --- data / tables ---
+pandas==2.2.3
+pyarrow==18.1.0
+
+# --- metrics / nearest-neighbour ---
+scikit-learn==1.5.2
+faiss-cpu==1.9.0
+
+# --- embeddings (also a core dep; pinned here for the audit) ---
+sentence-transformers==3.3.1
+
+# --- config ---
+pyyaml==6.0.2
+
+# --- language identification ---
+# Preferred: fastText + GlotLID model (cis-lmu/glotlid, file `model.bin`),
+# downloaded at runtime via huggingface_hub. `fasttext-wheel` ships prebuilt
+# binaries; on Python 3.12 / Windows a wheel may be unavailable, in which case
+# fall back to the pure-Python py3langid below.
+fasttext-wheel==0.9.2
+huggingface-hub>=0.24.0
+# Fallback language-ID (pure Python, always installable):
+py3langid==0.3.0
