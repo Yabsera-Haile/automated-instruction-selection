@@ -271,6 +271,45 @@ This machine's PyTorch install fails to load (`OSError: [WinError 1114] ...c10.d
   fixed before Phase 3 (e.g. reinstall CPU `torch`, or run the embedding/selection
   steps in the repo's CUDA/Linux env). **Flagged, not addressed now.**
 
+## 11. Two-machine workflow: dev (local) vs real (GPU server)  [Phase 3]
+
+Set by the project owner:
+
+| | LOCAL (dev) | GPU SERVER (real) |
+|---|---|---|
+| Role | write + test pipeline | all real experiments (M1+) |
+| GPU | RTX 2050, 4 GB | 3 × 24 GB |
+| Flag | `--dev` on every experiment script | (no flag) |
+| Output | `audit/results/dev/` (never research results) | `audit/results/` |
+| Perplexity model | Pythia-160m (proxy) | ≥1B (e.g. Pythia-1.4b) |
+| RDS+ embedder | all-MiniLM-L6-v2 (proxy) | repo 7B (Llama-2-7b-hf) |
+
+`--dev` (see `audit/common.py`) routes output to `audit/results/dev/`, prints
+`DEV RUN — small proxy model, not for research results.`, and swaps in the proxy
+models. **Only the model + output dir change** between dev and real; adapter logic,
+canonical JSON, and metrics are identical. Every selection JSON carries a `meta`
+block: model, device, gpu_name, runtime_s, vram_peak_mib.
+
+### Windows-only blocker the dev box must work around
+The repo's embedding scripts (`compute_influence_cosinesim.py`,
+`compute_influence_sentence_embedding.py`) call `dataset.map(num_proc=8/16)` at
+**unguarded module level**. On Windows (`spawn`), each worker re-imports the module
+and re-runs it → recursive process spawn → hang (observed: 17 procs from one script).
+On the Linux server (`fork`) this is fine.
+- **Perplexity** is unaffected: its file-path branch uses `num_proc=1`.
+- **RDS+ dev** therefore does the MiniLM embedding **in-process** in
+  `audit/selectors/run_rdsplus.py::embed_dev` (same text construction, cosine
+  scoring, and pickle format as the repo script), then still calls the repo's
+  `get_top_aggregated_influences` for selection. Real RDS+ (server) uses the repo
+  `compute_influence_cosinesim.py` unchanged.
+
+## 12. Transfer to the GPU server
+Push **code only**; the server regenerates all results from scratch (do not copy
+`audit/results/`, which is git-ignored anyway). Eval data (55 MB) and the pilot pool
+are recreated on the server via `shell_scripts/download_eval_data.sh` and
+`audit.metadata.build_metadata` / `export_pilot_jsonl`. Then run, without `--dev`:
+`python -m audit.experiments.run_stage_a` → `run_audit` → `make_m1_summary`.
+
 ### Dependency decision
 The core `requirements.txt` is intentionally left untouched (ground rule: touch core
 files only to expose selection results, additively). Audit deps live in

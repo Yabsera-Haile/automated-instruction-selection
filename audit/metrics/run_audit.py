@@ -27,6 +27,7 @@ import os
 
 import pandas as pd
 
+from audit.common import results_base
 from audit.metrics import audit_metrics as M
 
 logger = logging.getLogger("audit.run_audit")
@@ -46,13 +47,22 @@ TIDY_COLUMNS = [
 
 def parse_args():
     p = argparse.ArgumentParser(description="Representation audit over selection JSONs.")
-    p.add_argument("--metadata", required=True, help="Path to metadata parquet.")
-    p.add_argument("--selections_dir", required=True,
-                   help="Directory of canonical selection JSON files.")
-    p.add_argument("--output_dir", default="audit/results",
-                   help="Where audit_results.parquet and plots/ are written.")
+    p.add_argument("--metadata", default="audit/results/metadata_pilot.parquet",
+                   help="Path to metadata parquet.")
+    p.add_argument("--selections_dir", default=None,
+                   help="Directory of canonical selection JSONs (default: <base>/selections).")
+    p.add_argument("--output_dir", default=None,
+                   help="Where audit_results.parquet and plots/ go (default: <base>).")
     p.add_argument("--group_cols", nargs="+", default=["resource_bucket", "skill_label"])
-    return p.parse_args()
+    p.add_argument("--dev", action="store_true",
+                   help="Use audit/results/dev/ for selections + output.")
+    args = p.parse_args()
+    base = results_base(args.dev)
+    if args.selections_dir is None:
+        args.selections_dir = os.path.join(base, "selections")
+    if args.output_dir is None:
+        args.output_dir = base
+    return args
 
 
 def load_selection(path: str, idx2id: dict) -> dict:
@@ -73,7 +83,8 @@ def load_selection(path: str, idx2id: dict) -> dict:
 
     return {
         "selector": obj.get("selector", stem),
-        "budget": int(obj.get("budget", len(selected_ids))),
+        # budgets are fractions of the pool (0.01..0.50); keep as float.
+        "budget": float(obj.get("budget", len(selected_ids))),
         "seed": obj.get("seed", 0),
         "selected_ids": selected_ids,
     }
@@ -87,7 +98,9 @@ def build_tidy(df: pd.DataFrame, selections: list[dict], group_cols: list[str]) 
                 logger.warning("group_col %r not in metadata; skipping.", group_col)
                 continue
             summary = M.summarise(df, sel["selected_ids"], group_col)
-            for _, r in summary.iterrows():
+            # to_dict('records') preserves per-column dtypes; iterrows() would upcast
+            # the int resource_bucket group to float ("0" -> "0.0").
+            for r in summary.to_dict("records"):
                 rows.append({
                     "selector": sel["selector"],
                     "budget": sel["budget"],
@@ -186,7 +199,8 @@ def main() -> None:
 
     plots_dir = os.path.join(args.output_dir, "plots")
     for group_col in args.group_cols:
-        plot_faceted(tidy, group_col, os.path.join(plots_dir, f"representation_by_{group_col}.png"))
+        plot_faceted(tidy, group_col,
+                     os.path.join(plots_dir, f"representation_ratio_by_{group_col}.png"))
 
 
 if __name__ == "__main__":
