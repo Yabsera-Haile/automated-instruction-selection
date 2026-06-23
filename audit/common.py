@@ -13,9 +13,19 @@ canonical JSON, and audit metrics are identical.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import threading
 import time
+
+# Force MKL's GNU threading layer to avoid the Linux crash:
+#   "MKL_THREADING_LAYER=INTEL is incompatible with libgomp ... library"
+# (MKL numpy defaults to the INTEL layer, which clashes with the GNU OpenMP
+# libgomp that torch/sklearn load). Set before numpy/torch import; this module is
+# imported by every entry point, and child processes inherit os.environ. We only
+# override when unset or INTEL, preserving a deliberate GNU/SEQUENTIAL/TBB choice.
+if os.environ.get("MKL_THREADING_LAYER", "").upper() in ("", "INTEL"):
+    os.environ["MKL_THREADING_LAYER"] = "GNU"
 
 DEV_WARNING = "DEV RUN — small proxy model, not for research results."
 
