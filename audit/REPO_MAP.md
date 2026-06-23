@@ -281,7 +281,7 @@ Set by the project owner:
 | GPU | RTX 2050, 4 GB | 3 × 24 GB |
 | Flag | `--dev` on every experiment script | (no flag) |
 | Output | `audit/results/dev/` (never research results) | `audit/results/` |
-| Perplexity model | Pythia-160m (proxy) | ≥1B (e.g. Pythia-1.4b) |
+| Perplexity model | Pythia-160m (proxy) | Qwen2.5-1.5B (multilingual, ≥1B) |
 | RDS+ embedder | all-MiniLM-L6-v2 (proxy) | repo 7B (Llama-2-7b-hf) |
 
 `--dev` (see `audit/common.py`) routes output to `audit/results/dev/`, prints

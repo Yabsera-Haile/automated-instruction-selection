@@ -38,7 +38,10 @@ def ensure_utf8(module: str) -> None:
 # Model defaults per selector x mode. All overridable via each script's --model.
 PPL_DEV_MODEL = "EleutherAI/pythia-160m"      # GPT-2-class; 2048 ctx (GPT-2's 1024
 #                                               crashes the repo's 2048-token script)
-PPL_REAL_MODEL = "EleutherAI/pythia-1.4b"     # >=1B per spec; ungated; server may override
+PPL_REAL_MODEL = "Qwen/Qwen2.5-1.5B"          # multilingual >=1B base LM. Chosen over an
+#   English-centric LM (e.g. Pythia) on purpose: Pythia's English bias is exactly the
+#   bias we audit, so it would confound low-resource perplexity. Qwen2.5's multilingual
+#   pretraining makes the low-resource result representative and harder to dismiss.
 RDS_DEV_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # sentence-embedding path
 RDS_REAL_MODEL = "meta-llama/Llama-2-7b-hf"   # repo/paper RDS+ 7B backbone (cosinesim)
 
