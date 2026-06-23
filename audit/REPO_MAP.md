@@ -227,6 +227,50 @@ audit/
 └── results/    .gitkeep      # run outputs + logs (git-ignored by repo's results/ rule)
 ```
 
+---
+
+## 9. Join keys: `pool_row_idx` (pilot) vs `id` (scaling)  [Phase 1/2 note]
+
+The pilot metadata parquet has `pool_row_idx` 0–9999, reflecting positions in the
+*saved pilot file* `audit/results/pool_pilot.jsonl`.
+
+- **Within the pilot:** when selectors and embeddings run over that exact pilot file
+  (Phase 3), positional alignment is internally consistent —
+  `pool_row_idx` is a valid, cheap join key.
+- **When scaling to the full pool:** `pool_row_idx` is *file-specific* (it depends on
+  the reservoir sample + seed). It is **not** portable across pool files. So at full
+  scale **`id` is the primary join key**, and `pool_row_idx` is only a convenience
+  alias valid for one specific materialized pool file.
+
+Therefore the canonical selection format (Phase 3) and `audit/metrics/run_audit.py`
+key on **`id`** first; `pool_row_idx` / `selected_indices` is supported only as a
+fallback that is resolved to `id` *via the same pool file's metadata*.
+
+### Canonical selection JSON (defined here, produced in Phase 3)
+```json
+{
+  "selector": "rds_plus",        // string name of the selection method
+  "budget": 1000,                 // intended number selected (int)
+  "seed": 42,                     // selection seed (int; 0/None if N/A)
+  "pool": "audit/results/pool_pilot.jsonl",   // which pool the indices refer to
+  "selected_ids": ["<id>", ...]   // PREFERRED: list of metadata `id` strings
+  // optional alternative to selected_ids:
+  // "selected_indices": [0, 5, 9, ...]  // pool_row_idx into `pool`, mapped to id
+}
+```
+`run_audit.py` reads `selected_ids` if present, else maps `selected_indices` through
+the metadata's `pool_row_idx`→`id`. `selector`/`budget`/`seed` fall back to the
+filename if absent from the JSON.
+
+## 10. Environment flag: broken local torch  [Phase 3 blocker]
+
+This machine's PyTorch install fails to load (`OSError: [WinError 1114] ...c10.dll`).
+- **Phase 1/2 are unaffected** — they are pure pandas/numpy + `datasets` (streaming).
+  We pass `USE_TORCH=0` so `datasets` does not import torch.
+- **Phase 3 will need torch** (RDS+ embeddings, perplexity). The DLL issue must be
+  fixed before Phase 3 (e.g. reinstall CPU `torch`, or run the embedding/selection
+  steps in the repo's CUDA/Linux env). **Flagged, not addressed now.**
+
 ### Dependency decision
 The core `requirements.txt` is intentionally left untouched (ground rule: touch core
 files only to expose selection results, additively). Audit deps live in

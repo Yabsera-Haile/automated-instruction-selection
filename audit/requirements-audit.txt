@@ -20,6 +20,12 @@ sentence-transformers==3.3.1
 # --- config ---
 pyyaml==6.0.2
 
+# --- plotting (run_audit figures) ---
+matplotlib==3.9.2
+
+# --- testing ---
+pytest==8.3.4
+
 # --- language identification ---
 # Preferred: fastText + GlotLID model (cis-lmu/glotlid, file `model.bin`),
 # downloaded at runtime via huggingface_hub. `fasttext-wheel` ships prebuilt
