@@ -152,9 +152,17 @@ def select_budget(pickles: list[str], pool: str, output_size: int, work_dir: str
 
 
 def generate(pool: str, metadata: str, out_dir: str, work_dir: str, model: str,
-             dev: bool, eval_datasets=DEFAULT_EVAL_DATASETS, dtype: str = "fp32",
-             batch_size: int = 32, budgets=BUDGETS, selection_method: str = "max",
+             dev: bool, eval_datasets=DEFAULT_EVAL_DATASETS, dtype: str | None = None,
+             batch_size: int | None = None, budgets=BUDGETS, selection_method: str = "max",
              aggregation_method: str = "round_robin", force_embed: bool = False) -> list[str]:
+    # Real RDS+ uses the repo cosinesim script, whose DataLoader has no padding/
+    # collation -> it ONLY works at batch_size=1 (stacking variable-length seqs
+    # crashes). MiniLM dev embedding pads internally, so larger batches are fine.
+    if batch_size is None:
+        batch_size = 64 if dev else 1
+    # 7B in fp32 = ~28GB; bf16 (the repo/paper default) halves it and is faster.
+    if dtype is None:
+        dtype = "fp32" if dev else "bf16"
     n_pool = len(pd.read_parquet(metadata))
     os.makedirs(out_dir, exist_ok=True)
     if dev:
@@ -197,8 +205,9 @@ def main() -> None:
     ap.add_argument("--work_dir", default=None)
     ap.add_argument("--model", default=None, help="Override the embedding model.")
     ap.add_argument("--eval_datasets", nargs="+", default=DEFAULT_EVAL_DATASETS)
-    ap.add_argument("--dtype", default="fp32")
-    ap.add_argument("--batch_size", type=int, default=None)
+    ap.add_argument("--dtype", default=None, help="Default: fp32 (dev) / bf16 (real).")
+    ap.add_argument("--batch_size", type=int, default=None,
+                    help="Default: 64 (dev) / 1 (real; repo script needs batch 1).")
     ap.add_argument("--dev", action="store_true", help="Dev run with MiniLM proxy -> dev/.")
     ap.add_argument("--force_embed", action="store_true")
     args = ap.parse_args()
@@ -208,11 +217,10 @@ def main() -> None:
     out_dir = args.out_dir or os.path.join(base, "selections")
     work_dir = args.work_dir or os.path.join(base, "rds_work")
     model = args.model or (RDS_DEV_MODEL if args.dev else RDS_REAL_MODEL)
-    batch_size = args.batch_size if args.batch_size is not None else (64 if args.dev else 1)
 
     paths = generate(args.pool, args.metadata, out_dir, work_dir, model, args.dev,
                      eval_datasets=args.eval_datasets, dtype=args.dtype,
-                     batch_size=batch_size, force_embed=args.force_embed)
+                     batch_size=args.batch_size, force_embed=args.force_embed)
     logger.info("Wrote %d rdsplus selection files to %s", len(paths), out_dir)
 
 
