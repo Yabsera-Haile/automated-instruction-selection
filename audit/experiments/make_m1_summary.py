@@ -66,7 +66,7 @@ def decide(rb_pivot: pd.DataFrame) -> tuple[str, str]:
         return "UNCLEAR", (f"Random low-resource ratio {rnd:.2f} is not near 1.0, so "
                            "the baseline itself is off — cannot read the contrast.")
     flagged = []
-    for sel in ("perplexity", "rdsplus"):
+    for sel in ("perplexity-high", "rdsplus"):
         la = _low_avg(rb_pivot, sel)
         if pd.notna(la) and la < 0.75 and la < rnd - 0.15:
             flagged.append(f"{sel} ({la:.2f})")
@@ -98,6 +98,16 @@ def build_markdown(df: pd.DataFrame, dev: bool) -> str:
         "",
         rationale,
         "",
+        "## Perplexity direction (explicit)",
+        "The `perplexity-*` selectors differ only in which perplexity band they keep:",
+        "- **high** — keep the most-surprising (highest-perplexity) examples. This was the",
+        "  original M1 \"perplexity\" selector (repo `ppl_selections.py` default: sort NLL",
+        "  descending, take top-k). It is the one the go/no-go question refers to.",
+        "- **low** — keep the least-surprising (lowest-perplexity) examples (the common",
+        "  practitioner \"remove high-perplexity junk\" filter).",
+        "- **mid** — keep the central budget-fraction by perplexity rank (drop both tails;",
+        "  the \"When Less is More\" strategy).",
+        "",
         "## Representation ratios at 5% budget by resource bucket",
         "(1.0 = fair share; <1 = under-selected. Random averaged over seeds 0,1,2.)",
         "",
@@ -116,10 +126,10 @@ def build_markdown(df: pd.DataFrame, dev: bool) -> str:
 
 def _interpretation(rb: pd.DataFrame, verdict: str, dev: bool) -> str:
     rnd = _low_avg(rb, "random")
-    ppl = _low_avg(rb, "perplexity")
+    ppl = _low_avg(rb, "perplexity-high")
     rds = _low_avg(rb, "rdsplus")
     s = (f"At 5% budget, mean low-resource (buckets 0-2) representation ratios are: "
-         f"random {rnd:.2f}, perplexity {ppl:.2f}, RDS+ {rds:.2f}. "
+         f"random {rnd:.2f}, perplexity-high {ppl:.2f}, RDS+ {rds:.2f}. "
          f"A ratio below 1 means a selector keeps low-resource languages at less than "
          f"their pool share. ")
     if dev:
