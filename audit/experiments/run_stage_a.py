@@ -24,7 +24,7 @@ logger = logging.getLogger("audit.run_stage_a")
 def main() -> None:
     ensure_utf8("audit.experiments.run_stage_a")  # must precede heavy imports below
     from audit.selectors import (run_random, run_perplexity, run_rdsplus, run_ifd,
-                                 run_semdedup)
+                                 run_semdedup, run_quality)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     for n in ("sentence_transformers", "httpx", "urllib3", "datasets", "filelock",
               "huggingface_hub", "fsspec"):
@@ -44,29 +44,29 @@ def main() -> None:
     os.makedirs(sel_dir, exist_ok=True)
 
     if "random" not in args.skip:
-        logger.info("=== [1/4] random ===")
+        logger.info("=== [1/6] random ===")
         run_random.generate(args.metadata, sel_dir, dev=args.dev)
     if "perplexity" not in args.skip:
-        logger.info("=== [2/4] perplexity ===")
+        logger.info("=== [2/6] perplexity ===")
         ppl_model = run_perplexity.PPL_DEV_MODEL if args.dev else run_perplexity.PPL_REAL_MODEL
         run_perplexity.generate(
             args.pool, args.metadata, sel_dir, os.path.join(base, "ppl_work"),
             model=ppl_model, dev=args.dev)
     if "ifd" not in args.skip:
-        logger.info("=== [3/4] ifd ===")
+        logger.info("=== [3/6] ifd ===")
         ifd_model = run_ifd.PPL_DEV_MODEL if args.dev else run_ifd.PPL_REAL_MODEL
         run_ifd.generate(
             args.pool, args.metadata, sel_dir, os.path.join(base, "ifd_work"),
             model=ifd_model, dev=args.dev)
     rds_work = os.path.join(base, "rds_work")
     if "rdsplus" not in args.skip:
-        logger.info("=== [4/5] rdsplus ===")
+        logger.info("=== [4/6] rdsplus ===")
         run_rdsplus.generate(
             args.pool, args.metadata, sel_dir, rds_work,
             model=(run_rdsplus.RDS_DEV_MODEL if args.dev else run_rdsplus.RDS_REAL_MODEL),
             dev=args.dev)
     if "semdedup" not in args.skip:
-        logger.info("=== [5/5] semdedup (reuses RDS+ index) ===")
+        logger.info("=== [5/6] semdedup (reuses RDS+ index) ===")
         index_path = os.path.join(rds_work, "pool_index.pt" if args.dev
                                   else "cosine_train_reps.pt")
         if os.path.exists(index_path):
@@ -74,6 +74,12 @@ def main() -> None:
         else:
             logger.warning("Skipping semdedup: RDS+ index not found at %s "
                            "(run rdsplus first).", index_path)
+    if "quality" not in args.skip:
+        logger.info("=== [6/6] quality (LLM judge) ===")
+        q_model = run_quality.QUALITY_DEV_MODEL if args.dev else run_quality.QUALITY_REAL_MODEL
+        run_quality.generate(
+            args.pool, args.metadata, sel_dir, os.path.join(base, "quality_work"),
+            model=q_model, dev=args.dev)
 
     logger.info("Stage A selections written to %s", sel_dir)
     logger.info("Next: python -m audit.metrics.run_audit %s", "--dev" if args.dev else "")

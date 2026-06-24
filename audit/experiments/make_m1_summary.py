@@ -13,6 +13,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import glob
+import json
 import os
 
 import pandas as pd
@@ -77,7 +79,7 @@ def decide(rb_pivot: pd.DataFrame) -> tuple[str, str]:
                      "low-resource representation meaningfully below 1 at 5%.")
 
 
-def build_markdown(df: pd.DataFrame, dev: bool) -> str:
+def build_markdown(df: pd.DataFrame, dev: bool, selections_dir: str | None = None) -> str:
     rb = _pivot(df, "resource_bucket")
     sk = _pivot(df, "skill_label")
     verdict, rationale = decide(rb)
@@ -117,11 +119,46 @@ def build_markdown(df: pd.DataFrame, dev: bool) -> str:
         "",
         _md_table(sk, SKILL_ORDER, "skill") if not sk.empty else "_no data_",
         "",
+        "## Selector models & cost",
+        "(judge/scorer model, device, runtime and peak VRAM, from each selector's meta)",
+        "",
+        _selector_cost_table(selections_dir),
+        "",
         "## Interpretation",
         _interpretation(rb, verdict, dev),
         "",
     ]
     return "\n".join(parts)
+
+
+def _selector_cost_table(selections_dir: str) -> str:
+    """Per-selector judge/scorer model, device, runtime and peak VRAM (from JSON meta)."""
+    if not selections_dir or not os.path.isdir(selections_dir):
+        return "_no selection files found_"
+    rows = {}
+    for path in sorted(glob.glob(os.path.join(selections_dir, "*.json"))):
+        try:
+            obj = json.load(open(path, encoding="utf-8"))
+        except Exception:
+            continue
+        sel, meta = obj.get("selector", "?"), obj.get("meta", {}) or {}
+        if sel not in rows:
+            rows[sel] = {
+                "model": meta.get("model", "-"),
+                "device": meta.get("device", "-"),
+                "runtime_s": meta.get("runtime_s", None),
+                "vram_peak_mib": meta.get("vram_peak_mib", None),
+            }
+    if not rows:
+        return "_no selection files found_"
+    lines = ["| Selector | Model | Device | Runtime (s) | Peak VRAM (MiB) |",
+             "|---|---|---|---|---|"]
+    for sel in sorted(rows):
+        r = rows[sel]
+        rt = "-" if r["runtime_s"] is None else f"{r['runtime_s']:.0f}"
+        vr = "-" if r["vram_peak_mib"] is None else str(r["vram_peak_mib"])
+        lines.append(f"| {sel} | {r['model']} | {r['device']} | {rt} | {vr} |")
+    return "\n".join(lines)
 
 
 def _interpretation(rb: pd.DataFrame, verdict: str, dev: bool) -> str:
@@ -150,15 +187,17 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Generate M1_summary.md.")
     ap.add_argument("--results", default=None)
     ap.add_argument("--output", default=None)
+    ap.add_argument("--selections_dir", default=None)
     ap.add_argument("--dev", action="store_true")
     args = ap.parse_args()
 
     base = results_base(args.dev)
     results = args.results or os.path.join(base, "audit_results.parquet")
     output = args.output or os.path.join(base, "M1_summary.md")
+    selections_dir = args.selections_dir or os.path.join(base, "selections")
 
     df = pd.read_parquet(results)
-    md = build_markdown(df, args.dev)
+    md = build_markdown(df, args.dev, selections_dir)
     with open(output, "w", encoding="utf-8") as f:
         f.write(md)
     print(f"Wrote {output}")

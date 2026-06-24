@@ -54,6 +54,9 @@ PPL_REAL_MODEL = "Qwen/Qwen2.5-1.5B"          # multilingual >=1B base LM. Chose
 #   pretraining makes the low-resource result representative and harder to dismiss.
 RDS_DEV_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # sentence-embedding path
 RDS_REAL_MODEL = "meta-llama/Llama-2-7b-hf"   # repo/paper RDS+ 7B backbone (cosinesim)
+# LLM-quality judge (Ask-LLM/QuRating style). Instruct models.
+QUALITY_DEV_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"   # fits the 4GB dev GPU
+QUALITY_REAL_MODEL = "Qwen/Qwen2.5-7B-Instruct"    # strong judge on the server (bf16)
 
 RESULTS_DIR = "audit/results"
 DEV_RESULTS_DIR = "audit/results/dev"
