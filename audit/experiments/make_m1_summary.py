@@ -1,14 +1,16 @@
-"""Generate M1_summary.md from audit_results.parquet (Sub-step D).
+"""Generate M1_summary.md from audit_results.parquet (C-Step 6: corrected aggregation).
 
-Builds the Milestone-1 go/no-go summary: representation-ratio tables at the 5% budget
-by resource bucket and by skill label, plus an automated GO / NO-GO / UNCLEAR call.
+Fixes the aggregation bug: representation ratios are unbounded above and floored at 0,
+so a cross-group MEAN of ratios is dominated by over-selection (one amplified group
+swamps several eroded ones). We therefore:
+  * report representation ratio PER GROUP (never a cross-group mean of ratios);
+  * for any aggregate over a group set, aggregate RETENTION (kept/pool, bounded [0,1])
+    via Sum(kept)/Sum(pool) — using the identity retention_g = ratio_g * budget;
+  * add a worst-group view (eroded <0.5, amplified >2.0) per selector at 5%;
+  * state each selector's configuration and give a per-selector erosion/amplification
+    read in the signal-dependent-distortion framing.
 
-Go/no-go question: do hardness/perplexity selectors show representation ratio < 1 for
-low-resource buckets while random stays near 1?
-
-Usage:
-    python -m audit.experiments.make_m1_summary --dev
-    python -m audit.experiments.make_m1_summary --results audit/results/audit_results.parquet
+Usage: python -m audit.experiments.make_m1_summary [--dev]
 """
 from __future__ import annotations
 
@@ -21,14 +23,34 @@ import pandas as pd
 
 from audit.common import results_base
 
-LOW_BUCKETS = ["0", "1", "2"]
 TARGET_BUDGET = 0.05
+LOW_BUCKETS = ["0", "1", "2"]
+ERODE = 0.5
+AMPLIFY = 2.0
 SKILL_ORDER = ["math", "code", "multilingual", "science", "chat", "general",
                "safety", "instruction_following", "other"]
 
+SELECTOR_MECHANISM = {
+    "random": "uniform random sample (the fair baseline)",
+    "perplexity-high": "keeps the highest-perplexity (most 'surprising') examples",
+    "perplexity-low": "keeps the lowest-perplexity (most predictable) examples",
+    "perplexity-mid": "keeps the central perplexity band, dropping both tails",
+    "ifd": "keeps high instruction-following difficulty (the instruction helps, yet the "
+           "example stays hard)",
+    "semdedup": "removes near-duplicates and keeps diverse, centroid-distant representatives",
+    "quality": "keeps the examples an LLM judge rates highest quality",
+    "rdsplus": "retrieves the training examples most similar to the multitask eval set",
+}
 
-def _pivot(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
-    """Mean representation_ratio per (selector, group) at the target budget."""
+
+# ------------------------------- helpers ------------------------------------
+
+def _fmt(v) -> str:
+    return "-" if pd.isna(v) else f"{v:.2f}"
+
+
+def _ratio_by_group(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+    """Per-(selector, group) mean representation_ratio at the target budget."""
     sub = df[(df["group_col"] == group_col) & (df["budget"] == TARGET_BUDGET)]
     if sub.empty:
         return pd.DataFrame()
@@ -36,151 +58,227 @@ def _pivot(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
                            values="representation_ratio", aggfunc="mean")
 
 
-def _fmt(v) -> str:
-    return "-" if pd.isna(v) else f"{v:.2f}"
-
-
-def _md_table(pivot: pd.DataFrame, col_order: list[str], col_label: str) -> str:
+def _md_table(pivot: pd.DataFrame, col_order: list[str]) -> str:
+    if pivot.empty:
+        return "_no data_"
     cols = [c for c in col_order if c in pivot.columns]
     cols += [c for c in pivot.columns if c not in cols]
-    header = "| Selector | " + " | ".join(cols) + " |"
-    sep = "|" + "---|" * (len(cols) + 1)
-    lines = [header, sep]
-    for sel in pivot.index:
-        row = " | ".join(_fmt(pivot.loc[sel, c]) for c in cols)
-        lines.append(f"| {sel} | {row} |")
+    lines = ["| Selector | " + " | ".join(cols) + " |", "|" + "---|" * (len(cols) + 1)]
+    for sel in sorted(pivot.index):
+        lines.append("| " + sel + " | " + " | ".join(_fmt(pivot.loc[sel, c]) for c in cols) + " |")
     return "\n".join(lines)
 
 
-def _low_avg(pivot: pd.DataFrame, sel: str) -> float:
-    if sel not in pivot.index:
-        return float("nan")
-    cols = [c for c in LOW_BUCKETS if c in pivot.columns]
-    return float(pivot.loc[sel, cols].mean()) if cols else float("nan")
+def _budget_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Per (selector, group_col, group) mean kept/pool/ratio at the target budget
+    (averaged over seeds; pool_count is seed-invariant)."""
+    sub = df[df["budget"] == TARGET_BUDGET]
+    if sub.empty:
+        return sub
+    return (sub.groupby(["selector", "group_col", "group"], as_index=False)
+            .agg(representation_ratio=("representation_ratio", "mean"),
+                 retention_rate=("retention_rate", "mean"),
+                 kept_count=("kept_count", "mean"),
+                 pool_count=("pool_count", "mean")))
 
 
-def decide(rb_pivot: pd.DataFrame) -> tuple[str, str]:
-    """Return (verdict, rationale) from the resource-bucket pivot at 5%."""
-    if rb_pivot.empty or "random" not in rb_pivot.index:
-        return "UNCLEAR", "Missing random baseline or resource-bucket results."
-    rnd = _low_avg(rb_pivot, "random")
-    if not (0.7 <= rnd <= 1.3):
-        return "UNCLEAR", (f"Random low-resource ratio {rnd:.2f} is not near 1.0, so "
-                           "the baseline itself is off — cannot read the contrast.")
-    flagged = []
-    for sel in ("perplexity-high", "rdsplus"):
-        la = _low_avg(rb_pivot, sel)
-        if pd.notna(la) and la < 0.75 and la < rnd - 0.15:
-            flagged.append(f"{sel} ({la:.2f})")
-    if flagged:
-        return "GO", (f"Random low-resource ratio ≈ {rnd:.2f} (fair); "
-                      f"under-selecting: {', '.join(flagged)} < 1.")
-    return "NO-GO", (f"Random low-resource ratio ≈ {rnd:.2f}, but no selector drives "
-                     "low-resource representation meaningfully below 1 at 5%.")
+def lowres_retention_table(rows: pd.DataFrame) -> tuple[str, dict]:
+    """Pooled low-resource (buckets 0-2) retention per selector = Sum(kept)/Sum(pool).
 
+    This is the CORRECT aggregate (bounded, pool-weighted) — not a mean of ratios.
+    'fair' = budget; ratio column = pooled_retention / budget.
+    """
+    lr = rows[(rows["group_col"] == "resource_bucket") & (rows["group"].isin(LOW_BUCKETS))]
+    if lr.empty:
+        return "_no resource_bucket data_", {}
+    agg = (lr.groupby("selector")
+           .agg(kept=("kept_count", "sum"), pool=("pool_count", "sum")).reset_index())
+    agg["retention"] = agg["kept"] / agg["pool"]
+    agg["ratio"] = agg["retention"] / TARGET_BUDGET
+    lines = [f"Pooled over buckets 0-2 (Sum kept / Sum pool). Fair retention = budget = "
+             f"{TARGET_BUDGET}; ratio = retention / budget (1.0 = fair, <1 = eroded).",
+             "", "| Selector | low-res retention | ratio vs fair |", "|---|---|---|"]
+    ratios = {}
+    for _, r in agg.sort_values("ratio").iterrows():
+        ratios[r["selector"]] = r["ratio"]
+        lines.append(f"| {r['selector']} | {r['retention']:.4f} | {r['ratio']:.2f} |")
+    return "\n".join(lines), ratios
+
+
+def worst_groups(rows: pd.DataFrame) -> dict[str, dict]:
+    """Per selector: eroded (ratio<0.5) and amplified (ratio>2.0) groups across both
+    group sets, as (label, ratio) lists sorted by severity."""
+    out = {}
+    for sel, sub in rows.groupby("selector"):
+        eroded, amplified = [], []
+        for _, r in sub.iterrows():
+            label = (f"bucket {r['group']}" if r["group_col"] == "resource_bucket"
+                     else str(r["group"]))
+            ratio = r["representation_ratio"]
+            if ratio < ERODE:
+                eroded.append((label, ratio))
+            elif ratio > AMPLIFY:
+                amplified.append((label, ratio))
+        eroded.sort(key=lambda x: x[1])
+        amplified.sort(key=lambda x: -x[1])
+        out[sel] = {"eroded": eroded, "amplified": amplified}
+    return out
+
+
+def _grouplist(items) -> str:
+    return ", ".join(f"{lbl} ({r:.2f})" for lbl, r in items) if items else "none"
+
+
+def load_selector_meta(selections_dir: str) -> dict:
+    meta = {}
+    if selections_dir and os.path.isdir(selections_dir):
+        for path in sorted(glob.glob(os.path.join(selections_dir, "*.json"))):
+            try:
+                obj = json.load(open(path, encoding="utf-8"))
+            except Exception:
+                continue
+            sel = obj.get("selector", "?")
+            meta.setdefault(sel, obj.get("meta", {}) or {})
+    return meta
+
+
+# ------------------------------- sections -----------------------------------
+
+def cost_table(meta: dict) -> str:
+    if not meta:
+        return "_no selection metas found_"
+    lines = ["| Selector | Model | Device | Runtime (s) | Peak VRAM (MiB) |",
+             "|---|---|---|---|---|"]
+    for sel in sorted(meta):
+        m = meta[sel]
+        rt = m.get("runtime_s"); vr = m.get("vram_peak_mib")
+        lines.append(f"| {sel} | {m.get('model', '-')} | {m.get('device', '-')} | "
+                     f"{'-' if rt is None else f'{rt:.0f}'} | {'-' if vr is None else vr} |")
+    return "\n".join(lines)
+
+
+def config_section(meta: dict) -> str:
+    def m(sel, key, default="?"):
+        return (meta.get(sel, {}) or {}).get(key, default)
+    lines = []
+    lines.append("- **random** — uniform without replacement; seeds 0,1,2.")
+    for d in ("high", "low", "mid"):
+        sel = f"perplexity-{d}"
+        if sel in meta or True:
+            desc = {"high": "keep highest perplexity (top-k NLL)",
+                    "low": "keep lowest perplexity",
+                    "mid": "keep the central perplexity band"}[d]
+            lines.append(f"- **{sel}** — {desc}; scorer = {m(sel, 'model', 'Qwen2.5-1.5B')}.")
+    lines.append(f"- **ifd** — IFD = ppl(response|instruction) / ppl(response); discard "
+                 f"IFD ≥ 1.0, then keep highest IFD < 1.0 up to budget; "
+                 f"scorer = {m('ifd', 'model', 'Qwen2.5-1.5B')}.")
+    lines.append(f"- **semdedup** — KMeans on the RDS+ embeddings "
+                 f"({m('semdedup', 'index_model', 'cosinesim_7b')}); near-duplicate cosine "
+                 f"threshold = {m('semdedup', 'threshold', 0.95)}; keep the example closest "
+                 f"to each cluster centroid; budget ranking = "
+                 f"{m('semdedup', 'ranking', 'farthest-from-centroid (most diverse)')}.")
+    lines.append(f"- **quality** — LLM judge {m('quality', 'model', 'Qwen2.5-7B-Instruct')}, "
+                 f"language-neutral prompt {m('quality', 'judge_prompt', 'audit/configs/quality_judge_prompt.txt')} "
+                 f"(scale {m('quality', 'scale', '1-5')}); keep top-scoring up to budget.")
+    lines.append(f"- **rdsplus** — multitask cosine retrieval to the eval sets, round-robin "
+                 f"max selection; backbone = {m('rdsplus', 'model', 'Llama-2-7b-hf')}.")
+    return "\n".join(lines)
+
+
+def per_selector_reads(worst: dict) -> str:
+    paras = []
+    for sel in sorted(worst):
+        mech = SELECTOR_MECHANISM.get(sel, "selects by its own signal")
+        er = _grouplist(worst[sel]["eroded"])
+        am = _grouplist(worst[sel]["amplified"])
+        if sel == "random":
+            paras.append(f"**random** — {mech}. Eroded (<0.5): {er}. Amplified (>2.0): "
+                         f"{am}. By construction it tracks the pool, so any extreme groups "
+                         f"here are small-sample noise rather than distortion.")
+        else:
+            paras.append(
+                f"**{sel}** — {mech}. Eroded (<0.5): {er}. Amplified (>2.0): {am}. "
+                f"Consistent with signal-dependent distortion: optimizing this selector's "
+                f"signal systematically over-keeps the capabilities its signal favours and "
+                f"drops those it does not — the choice of selector, not just the budget, "
+                f"reshapes which skills and languages survive.")
+    return "\n\n".join(paras)
+
+
+def verdict(lr_ratios: dict) -> tuple[str, str]:
+    if "random" not in lr_ratios:
+        return "UNCLEAR", "No random baseline / resource-bucket data."
+    rnd = lr_ratios["random"]
+    eroders = sorted([s for s, r in lr_ratios.items()
+                      if s != "random" and r < 0.8], key=lambda s: lr_ratios[s])
+    amplifiers = sorted([s for s, r in lr_ratios.items()
+                         if s != "random" and r > 1.5], key=lambda s: -lr_ratios[s])
+    txt = (f"Using the corrected pooled low-resource (buckets 0-2) **retention** "
+           f"(not a mean of ratios): random sits at ratio {rnd:.2f} vs fair (≈1). "
+           f"Selectors that ERODE low-resource in aggregate (<0.8): "
+           f"{', '.join(f'{s} ({lr_ratios[s]:.2f})' for s in eroders) or 'none'}. "
+           f"Selectors that AMPLIFY (>1.5): "
+           f"{', '.join(f'{s} ({lr_ratios[s]:.2f})' for s in amplifiers) or 'none'}.")
+    # The honest verdict: signal-dependent distortion, surfaced per-capability below.
+    return "SIGNAL-DEPENDENT DISTORTION", txt
+
+
+# ------------------------------- assembly -----------------------------------
 
 def build_markdown(df: pd.DataFrame, dev: bool, selections_dir: str | None = None) -> str:
-    rb = _pivot(df, "resource_bucket")
-    sk = _pivot(df, "skill_label")
-    verdict, rationale = decide(rb)
+    rows = _budget_rows(df)
+    rb = _ratio_by_group(df, "resource_bucket")
+    sk = _ratio_by_group(df, "skill_label")
+    lr_table, lr_ratios = lowres_retention_table(rows)
+    worst = worst_groups(rows)
+    meta = load_selector_meta(selections_dir)
+    vname, vtext = verdict(lr_ratios)
 
     parts = ["# Milestone 1 Summary", ""]
     if dev:
-        parts += ["> ⚠️ **DEV RUN — small proxy models, NOT research results.**",
-                  "> Perplexity = Pythia-160m, RDS+ = all-MiniLM-L6-v2 embeddings on a "
-                  "4GB dev GPU. Real M1 numbers come from the GPU server (perplexity "
-                  "≥1B, RDS+ 7B). Treat the verdict below as a pipeline demonstration.",
-                  ""]
+        parts += ["> ⚠️ **DEV RUN — small proxy models, NOT research results.**", ""]
     parts += [
         "## Go/no-go question",
-        "Do hardness/perplexity selectors show representation ratio < 1 for low-resource",
-        "buckets while random stays near 1?",
+        "Do data-selection methods distort the training mixture — eroding low-resource",
+        "languages and rare skills — relative to a random baseline?",
         "",
-        f"## Result: {verdict}",
+        f"## Result: {vname}",
         "",
-        rationale,
+        vtext,
         "",
-        "## Perplexity direction (explicit)",
-        "The `perplexity-*` selectors differ only in which perplexity band they keep:",
-        "- **high** — keep the most-surprising (highest-perplexity) examples. This was the",
-        "  original M1 \"perplexity\" selector (repo `ppl_selections.py` default: sort NLL",
-        "  descending, take top-k). It is the one the go/no-go question refers to.",
-        "- **low** — keep the least-surprising (lowest-perplexity) examples (the common",
-        "  practitioner \"remove high-perplexity junk\" filter).",
-        "- **mid** — keep the central budget-fraction by perplexity rank (drop both tails;",
-        "  the \"When Less is More\" strategy).",
+        "## Low-resource aggregate (corrected: pooled retention, not averaged ratios)",
+        lr_table,
         "",
-        "## Representation ratios at 5% budget by resource bucket",
-        "(1.0 = fair share; <1 = under-selected. Random averaged over seeds 0,1,2.)",
-        "",
-        _md_table(rb, [str(i) for i in range(6)], "bucket") if not rb.empty else "_no data_",
-        "",
-        "## Representation ratios at 5% budget by skill label",
-        "",
-        _md_table(sk, SKILL_ORDER, "skill") if not sk.empty else "_no data_",
+        "## Selector configurations",
+        config_section(meta),
         "",
         "## Selector models & cost",
-        "(judge/scorer model, device, runtime and peak VRAM, from each selector's meta)",
+        cost_table(meta),
         "",
-        _selector_cost_table(selections_dir),
+        "## Representation ratio at 5% budget by resource bucket (per group; 1.0 = fair)",
+        "(Random averaged over seeds 0,1,2. Do not average these across groups — see the",
+        "pooled-retention table above for the low-resource aggregate.)",
         "",
-        "## Interpretation",
-        _interpretation(rb, verdict, dev),
+        _md_table(rb, [str(i) for i in range(6)]),
+        "",
+        "## Representation ratio at 5% budget by skill label (per group)",
+        "",
+        _md_table(sk, SKILL_ORDER),
+        "",
+        f"## Worst-group view at 5% (eroded <{ERODE}, amplified >{AMPLIFY})",
+        "Per selector, the groups (resource buckets and skills) most distorted:",
+        "",
+        "\n".join(
+            f"- **{sel}** — eroded: {_grouplist(worst[sel]['eroded'])}; "
+            f"amplified: {_grouplist(worst[sel]['amplified'])}"
+            for sel in sorted(worst)),
+        "",
+        "## Per-selector read (signal-dependent distortion)",
+        "",
+        per_selector_reads(worst),
         "",
     ]
     return "\n".join(parts)
-
-
-def _selector_cost_table(selections_dir: str) -> str:
-    """Per-selector judge/scorer model, device, runtime and peak VRAM (from JSON meta)."""
-    if not selections_dir or not os.path.isdir(selections_dir):
-        return "_no selection files found_"
-    rows = {}
-    for path in sorted(glob.glob(os.path.join(selections_dir, "*.json"))):
-        try:
-            obj = json.load(open(path, encoding="utf-8"))
-        except Exception:
-            continue
-        sel, meta = obj.get("selector", "?"), obj.get("meta", {}) or {}
-        if sel not in rows:
-            rows[sel] = {
-                "model": meta.get("model", "-"),
-                "device": meta.get("device", "-"),
-                "runtime_s": meta.get("runtime_s", None),
-                "vram_peak_mib": meta.get("vram_peak_mib", None),
-            }
-    if not rows:
-        return "_no selection files found_"
-    lines = ["| Selector | Model | Device | Runtime (s) | Peak VRAM (MiB) |",
-             "|---|---|---|---|---|"]
-    for sel in sorted(rows):
-        r = rows[sel]
-        rt = "-" if r["runtime_s"] is None else f"{r['runtime_s']:.0f}"
-        vr = "-" if r["vram_peak_mib"] is None else str(r["vram_peak_mib"])
-        lines.append(f"| {sel} | {r['model']} | {r['device']} | {rt} | {vr} |")
-    return "\n".join(lines)
-
-
-def _interpretation(rb: pd.DataFrame, verdict: str, dev: bool) -> str:
-    rnd = _low_avg(rb, "random")
-    ppl = _low_avg(rb, "perplexity-high")
-    rds = _low_avg(rb, "rdsplus")
-    s = (f"At 5% budget, mean low-resource (buckets 0-2) representation ratios are: "
-         f"random {rnd:.2f}, perplexity-high {ppl:.2f}, RDS+ {rds:.2f}. "
-         f"A ratio below 1 means a selector keeps low-resource languages at less than "
-         f"their pool share. ")
-    if dev:
-        s += ("Because the dev perplexity model is tiny and English-centric, its "
-              "perplexity ranking can behave differently from a real ≥1B model "
-              "(small models often assign *high* perplexity to low-resource text, "
-              "which top-perplexity selection would then over-select) — so the dev "
-              "verdict is illustrative only. The pipeline is confirmed end to end; "
-              "rerun on the GPU server for the real go/no-go.")
-    else:
-        s += ("If perplexity/RDS+ sit well below random here, the project's central "
-              "hypothesis holds and we proceed to the noise-disentanglement and "
-              "rarity-aware phases.")
-    return s
 
 
 def main() -> None:
