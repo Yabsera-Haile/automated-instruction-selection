@@ -23,7 +23,8 @@ logger = logging.getLogger("audit.run_stage_a")
 
 def main() -> None:
     ensure_utf8("audit.experiments.run_stage_a")  # must precede heavy imports below
-    from audit.selectors import run_random, run_perplexity, run_rdsplus, run_ifd
+    from audit.selectors import (run_random, run_perplexity, run_rdsplus, run_ifd,
+                                 run_semdedup)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     for n in ("sentence_transformers", "httpx", "urllib3", "datasets", "filelock",
               "huggingface_hub", "fsspec"):
@@ -57,12 +58,22 @@ def main() -> None:
         run_ifd.generate(
             args.pool, args.metadata, sel_dir, os.path.join(base, "ifd_work"),
             model=ifd_model, dev=args.dev)
+    rds_work = os.path.join(base, "rds_work")
     if "rdsplus" not in args.skip:
-        logger.info("=== [4/4] rdsplus ===")
+        logger.info("=== [4/5] rdsplus ===")
         run_rdsplus.generate(
-            args.pool, args.metadata, sel_dir, os.path.join(base, "rds_work"),
+            args.pool, args.metadata, sel_dir, rds_work,
             model=(run_rdsplus.RDS_DEV_MODEL if args.dev else run_rdsplus.RDS_REAL_MODEL),
             dev=args.dev)
+    if "semdedup" not in args.skip:
+        logger.info("=== [5/5] semdedup (reuses RDS+ index) ===")
+        index_path = os.path.join(rds_work, "pool_index.pt" if args.dev
+                                  else "cosine_train_reps.pt")
+        if os.path.exists(index_path):
+            run_semdedup.generate(args.metadata, index_path, sel_dir, args.dev)
+        else:
+            logger.warning("Skipping semdedup: RDS+ index not found at %s "
+                           "(run rdsplus first).", index_path)
 
     logger.info("Stage A selections written to %s", sel_dir)
     logger.info("Next: python -m audit.metrics.run_audit %s", "--dev" if args.dev else "")

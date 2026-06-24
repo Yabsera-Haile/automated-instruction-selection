@@ -61,11 +61,15 @@ def embed_dev(pool: str, eval_datasets: list[str], work_dir: str, model: str,
     from minimal_multitask.data import DATASETS
     from minimal_multitask.utils import create_prompt_with_tulu_chat_format
 
+    import torch
     os.makedirs(work_dir, exist_ok=True)
     pickles = [os.path.join(work_dir, f"{ev}_embedding.pkl") for ev in eval_datasets]
+    # Persist the normalized pool embeddings so SemDeDup (C-Step 3) can reuse them,
+    # mirroring the real cosinesim script's cosine_train_reps.pt. Row i == pool_row_idx i.
+    index_path = os.path.join(work_dir, "pool_index.pt")
     sampler = VramSampler()
-    if all(os.path.exists(p) for p in pickles) and not force:
-        logger.info("Reusing %d dev score pickles.", len(pickles))
+    if all(os.path.exists(p) for p in pickles) and os.path.exists(index_path) and not force:
+        logger.info("Reusing %d dev score pickles + pool index.", len(pickles))
         return pickles, sampler
 
     tok = AutoTokenizer.from_pretrained(TULU_TOKENIZER)
@@ -81,6 +85,8 @@ def embed_dev(pool: str, eval_datasets: list[str], work_dir: str, model: str,
         logger.info("Encoding %d pool texts with %s ...", len(pool_texts), model)
         pool_emb = st.encode(pool_texts, batch_size=batch_size, convert_to_numpy=True,
                              normalize_embeddings=True, show_progress_bar=True)
+        torch.save(torch.from_numpy(pool_emb), index_path)
+        logger.info("Saved dev pool index %s shape=%s", index_path, tuple(pool_emb.shape))
 
         for ev, pkl in zip(eval_datasets, pickles):
             if os.path.exists(pkl) and not force:
