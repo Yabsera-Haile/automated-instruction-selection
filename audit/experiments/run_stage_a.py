@@ -34,13 +34,19 @@ def main() -> None:
     ap.add_argument("--pool", default="audit/results/pilot_pool.jsonl")
     ap.add_argument("--metadata", default="audit/results/metadata_pilot.parquet")
     ap.add_argument("--dev", action="store_true")
+    ap.add_argument("--selections_dir", default=None,
+                    help="Where to write selection JSONs (default <base>/selections). "
+                         "Set this for a scale run so it doesn't clobber the pilot.")
+    ap.add_argument("--work_root", default=None,
+                    help="Root for the per-selector *_work caches (default <base>).")
     ap.add_argument("--skip", nargs="*", default=[],
-                    help="Selectors to skip: random perplexity rdsplus.")
+                    help="Selectors to skip: random perplexity ifd rdsplus semdedup quality.")
     args = ap.parse_args()
 
     announce_dev(args.dev, logger)
     base = results_base(args.dev)
-    sel_dir = os.path.join(base, "selections")
+    sel_dir = args.selections_dir or os.path.join(base, "selections")
+    work_root = args.work_root or base
     os.makedirs(sel_dir, exist_ok=True)
 
     if "random" not in args.skip:
@@ -50,15 +56,15 @@ def main() -> None:
         logger.info("=== [2/6] perplexity ===")
         ppl_model = run_perplexity.PPL_DEV_MODEL if args.dev else run_perplexity.PPL_REAL_MODEL
         run_perplexity.generate(
-            args.pool, args.metadata, sel_dir, os.path.join(base, "ppl_work"),
+            args.pool, args.metadata, sel_dir, os.path.join(work_root, "ppl_work"),
             model=ppl_model, dev=args.dev)
     if "ifd" not in args.skip:
         logger.info("=== [3/6] ifd ===")
         ifd_model = run_ifd.PPL_DEV_MODEL if args.dev else run_ifd.PPL_REAL_MODEL
         run_ifd.generate(
-            args.pool, args.metadata, sel_dir, os.path.join(base, "ifd_work"),
+            args.pool, args.metadata, sel_dir, os.path.join(work_root, "ifd_work"),
             model=ifd_model, dev=args.dev)
-    rds_work = os.path.join(base, "rds_work")
+    rds_work = os.path.join(work_root, "rds_work")
     if "rdsplus" not in args.skip:
         logger.info("=== [4/6] rdsplus ===")
         run_rdsplus.generate(
@@ -78,7 +84,7 @@ def main() -> None:
         logger.info("=== [6/6] quality (LLM judge) ===")
         q_model = run_quality.QUALITY_DEV_MODEL if args.dev else run_quality.QUALITY_REAL_MODEL
         run_quality.generate(
-            args.pool, args.metadata, sel_dir, os.path.join(base, "quality_work"),
+            args.pool, args.metadata, sel_dir, os.path.join(work_root, "quality_work"),
             model=q_model, dev=args.dev)
 
     logger.info("Stage A selections written to %s", sel_dir)
