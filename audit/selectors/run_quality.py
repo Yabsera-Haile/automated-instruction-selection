@@ -82,6 +82,13 @@ def score_quality(pool, work_dir, model_name, prompt_template, dtype, batch_size
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"  # decoder-only batched generation
+    # We decode greedily (do_sample=False) for a deterministic judge. Clear the model's
+    # default sampling params (Qwen ships temperature=0.7/top_p/top_k) so transformers
+    # doesn't warn that they're unused. Cosmetic only — does not change the greedy output.
+    model.generation_config.do_sample = False
+    for attr in ("temperature", "top_p", "top_k"):
+        if hasattr(model.generation_config, attr):
+            setattr(model.generation_config, attr, None)
     device = next(model.parameters()).device
 
     examples = [json.loads(l) for l in open(pool, encoding="utf-8") if l.strip()]
