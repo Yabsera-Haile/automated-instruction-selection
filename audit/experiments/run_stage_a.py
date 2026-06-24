@@ -23,7 +23,7 @@ logger = logging.getLogger("audit.run_stage_a")
 
 def main() -> None:
     ensure_utf8("audit.experiments.run_stage_a")  # must precede heavy imports below
-    from audit.selectors import run_random, run_perplexity, run_rdsplus
+    from audit.selectors import run_random, run_perplexity, run_rdsplus, run_ifd
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     for n in ("sentence_transformers", "httpx", "urllib3", "datasets", "filelock",
               "huggingface_hub", "fsspec"):
@@ -43,16 +43,22 @@ def main() -> None:
     os.makedirs(sel_dir, exist_ok=True)
 
     if "random" not in args.skip:
-        logger.info("=== [1/3] random ===")
+        logger.info("=== [1/4] random ===")
         run_random.generate(args.metadata, sel_dir, dev=args.dev)
     if "perplexity" not in args.skip:
-        logger.info("=== [2/3] perplexity ===")
+        logger.info("=== [2/4] perplexity ===")
         ppl_model = run_perplexity.PPL_DEV_MODEL if args.dev else run_perplexity.PPL_REAL_MODEL
         run_perplexity.generate(
             args.pool, args.metadata, sel_dir, os.path.join(base, "ppl_work"),
             model=ppl_model, dev=args.dev)
+    if "ifd" not in args.skip:
+        logger.info("=== [3/4] ifd ===")
+        ifd_model = run_ifd.PPL_DEV_MODEL if args.dev else run_ifd.PPL_REAL_MODEL
+        run_ifd.generate(
+            args.pool, args.metadata, sel_dir, os.path.join(base, "ifd_work"),
+            model=ifd_model, dev=args.dev)
     if "rdsplus" not in args.skip:
-        logger.info("=== [3/3] rdsplus ===")
+        logger.info("=== [4/4] rdsplus ===")
         run_rdsplus.generate(
             args.pool, args.metadata, sel_dir, os.path.join(base, "rds_work"),
             model=(run_rdsplus.RDS_DEV_MODEL if args.dev else run_rdsplus.RDS_REAL_MODEL),
