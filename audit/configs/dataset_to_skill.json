@@ -2,6 +2,7 @@
   "_comment": "Maps Tulu-3 `source` (or Tulu-2 `dataset`) provenance values to coarse skills. build_metadata.py resolves in order: exact match -> first matching keyword rule -> default. Coarse skills per Phase 1 spec: math, code, multilingual, science, chat, general, other. Items marked JUDGMENT below are reviewable calls flagged in the Phase 1 report.",
   "default": "other",
   "exact": {
+    "muri": "multilingual",
     "ai2-adapt-dev/personahub_math_v5_regen_149960": "math",
     "ai2-adapt-dev/numinamath_tir_math_decontaminated": "math",
     "allenai/tulu-3-sft-personas-math-grade": "math",

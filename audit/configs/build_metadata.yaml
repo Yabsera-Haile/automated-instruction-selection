@@ -35,3 +35,12 @@ tokenizer: ""
 
 # Run log (in addition to stdout).
 log_file: audit/results/build_metadata.log
+
+# --- MURI-IT injection (C-Step 5): enrich low-resource buckets ---
+# Used by audit.metadata.inject_muri. Stream akoksal/muri and top up Joshi buckets 0-2.
+muri_dataset: akoksal/muri
+enriched_pool: audit/results/pool_pilot_enriched.jsonl
+muri_n: 2000                  # cap on total MURI examples injected (CLI: --muri_n)
+muri_target_per_bucket: 500   # desired FINAL count for each of buckets 0,1,2
+muri_per_config_cap: 150      # max per language config (diversifies languages)
+muri_max_scan: 200000         # safety cap on MURI examples scanned
