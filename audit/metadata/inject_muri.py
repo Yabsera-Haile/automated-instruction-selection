@@ -102,13 +102,15 @@ def sample_muri(muri_dataset, configs, quotas, langid, resource_mapper,
             iso3, _, _, _ = langid.predict(inp)
             bucket = resource_mapper.bucket(iso3)
             if bucket in quotas and quotas[bucket] > 0:
+                # Keep the schema identical to Tulu rows (id/source/messages) so the
+                # enriched pool stays uniform for load_dataset('json'). The language is
+                # recovered by GlotLID in build_metadata, so we don't carry MURI's own
+                # language fields here.
                 rows.append({
                     "id": mint_muri_id(inp, out),
                     "source": "muri",
                     "messages": [{"role": "user", "content": inp},
                                  {"role": "assistant", "content": out}],
-                    "muri_language": ex.get("language"),
-                    "muri_language_name": ex.get("language_name"),
                 })
                 quotas[bucket] -= 1
                 achieved[bucket] += 1

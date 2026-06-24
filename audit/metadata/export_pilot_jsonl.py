@@ -86,7 +86,12 @@ def main() -> None:
         for i, (orig, mrow) in enumerate(zip(originals, meta_records)):
             if int(mrow["pool_row_idx"]) != i:
                 raise ValueError(f"pool_row_idx out of order at position {i}: {mrow['pool_row_idx']}")
-            merged = dict(orig)  # all original fields
+            # Uniform schema only: the repo's load_dataset('json') requires identical
+            # columns across all rows. MURI-injected rows carry extra fields (e.g.
+            # muri_language) that the Tulu rows lack and that would break it. Keep just
+            # `messages` from the original plus the canonical metadata columns (which
+            # already include id and source).
+            merged = {"messages": orig.get("messages")}
             for col in METADATA_COLUMNS:
                 val = mrow[col]
                 # json-safe: numpy scalars -> python scalars
