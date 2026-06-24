@@ -95,16 +95,17 @@ def main() -> None:
             n += 1
     logger.info("Wrote %d rows -> %s", n, args.output)
 
-    # ---- verification ----
+    # ---- verification (pool size is dynamic: 10k base, more if MURI-enriched) ----
     with open(args.output, "r", encoding="utf-8") as f:
         lines = [json.loads(l) for l in f if l.strip()]
-    assert len(lines) == 10000, f"Expected 10000 rows, got {len(lines)}"
+    assert len(lines) == n, f"Expected {n} rows, got {len(lines)}"
     idxs = [r["pool_row_idx"] for r in lines]
-    assert idxs == list(range(10000)), "pool_row_idx not 0..9999 in order"
+    assert idxs == list(range(len(lines))), "pool_row_idx not 0..N-1 in order"
     has_messages = all("messages" in r for r in lines)
     has_meta = all(all(c in r for c in METADATA_COLUMNS) for r in lines)
-    logger.info("VERIFIED: 10000 rows, pool_row_idx 0..9999 in order, "
-                "messages present=%s, metadata cols present=%s", has_messages, has_meta)
+    logger.info("VERIFIED: %d rows, pool_row_idx 0..%d in order, "
+                "messages present=%s, metadata cols present=%s",
+                len(lines), len(lines) - 1, has_messages, has_meta)
     logger.info("Sample row 0 keys: %s", sorted(lines[0].keys()))
 
 
