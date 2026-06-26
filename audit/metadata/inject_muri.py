@@ -81,6 +81,7 @@ def sample_muri(muri_dataset, configs, quotas, langid, resource_mapper,
     from datasets import load_dataset
     rows = []
     achieved = collections.Counter()
+    seen_ids: set[str] = set()   # dedup identical MURI examples (same content -> same id)
     scanned = 0
     for cfg in configs:
         if sum(quotas.values()) <= 0 or len(rows) >= muri_n or scanned >= max_scan:
@@ -99,6 +100,9 @@ def sample_muri(muri_dataset, configs, quotas, langid, resource_mapper,
             out = (ex.get("output") or "").strip()
             if not inp or not out:
                 continue
+            mid = mint_muri_id(inp, out)
+            if mid in seen_ids:        # skip identical MURI examples (duplicate id)
+                continue
             iso3, _, _, _ = langid.predict(inp)
             bucket = resource_mapper.bucket(iso3)
             if bucket in quotas and quotas[bucket] > 0:
@@ -106,8 +110,9 @@ def sample_muri(muri_dataset, configs, quotas, langid, resource_mapper,
                 # enriched pool stays uniform for load_dataset('json'). The language is
                 # recovered by GlotLID in build_metadata, so we don't carry MURI's own
                 # language fields here.
+                seen_ids.add(mid)
                 rows.append({
-                    "id": mint_muri_id(inp, out),
+                    "id": mid,
                     "source": "muri",
                     "messages": [{"role": "user", "content": inp},
                                  {"role": "assistant", "content": out}],
