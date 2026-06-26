@@ -17,6 +17,7 @@ visualizations/
 .venv/
 .vscode/
 /*.iml
+__MACOSX/
 
 
 # jupyter notebooks
@@ -52,6 +53,7 @@ site/
 venv/
 test/
 
+
 # hamish artifacts
 data/
 notebooks/
@@ -66,3 +68,33 @@ tmp_logix
 models
 muru_pickle_outputs
 selection_files
+
+# Audit-generated artifacts — NEVER commit these.
+#
+# audit/results/ is also covered by the repo-root .gitignore's `results/` rule; it is
+# repeated here so the audit/ package is self-contained (works even if the root
+# .gitignore is missing on a clone) and so generated files never show up in `git status`.
+
+# all run outputs (selections, *_work caches, plots, logs, materialized pool, parquet)
+results/
+
+# scoring caches / embedding indexes / score pickles / tables / pools / logs, wherever
+# they land under audit/ (these extensions are never used by tracked config files,
+# which are .py/.json/.yaml/.txt/.md)
+*.pkl
+*.pt
+*.parquet
+*.npy
+*.faiss
+*.jsonl
+*.log
+*.png
+*.zip
+
+# python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# the bundle, if generated inside the tree
+*.bundle
