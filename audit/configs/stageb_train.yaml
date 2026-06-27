@@ -1,0 +1,23 @@
+# Stage-B LoRA fine-tuning config (B-3). Same settings for all 9 cells (fair comparison).
+model: Qwen/Qwen2.5-7B          # base, not Instruct
+
+# LoRA
+lora_rank: 64
+lora_alpha: 32
+lora_dropout: 0.05
+target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+# optimization
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+num_train_epochs: 3             # FIXED epochs for all cells (larger subsets => more steps)
+max_seq_len: 2048
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 64  # effective batch size = 1 * 64 = 64
+weight_decay: 0.0
+
+# precision / memory
+bf16: true
+gradient_checkpointing: true
+load_4bit: false                 # QLoRA fallback: set true if bf16 LoRA is VRAM-tight
