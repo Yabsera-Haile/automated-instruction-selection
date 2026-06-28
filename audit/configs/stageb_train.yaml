@@ -20,4 +20,8 @@ weight_decay: 0.0
 # precision / memory
 bf16: true
 gradient_checkpointing: true
-load_4bit: false                 # QLoRA fallback: set true if bf16 LoRA is VRAM-tight
+# bf16 LoRA OOMs on the 24GB A5000 at backward (7B weights 14GB + 152k-vocab logits +
+# activations + optimizer ~= 23GB). Use the spec's QLoRA 4-bit fallback: frozen base
+# ~5.5GB, leaving ample headroom. Requires bitsandbytes on the server.
+load_4bit: true
+optim: paged_adamw_8bit          # bitsandbytes paged optimizer (pairs with QLoRA)

@@ -15,6 +15,10 @@ import json
 import os
 import time
 
+# Reduce fragmentation-driven OOM (the error message recommends this); must be set
+# before torch initializes CUDA, so set it at import time.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 
 def load_cfg(path: str) -> dict:
     import yaml
@@ -105,6 +109,7 @@ def main() -> None:
         # for bf16 let the Trainer enable it (avoids double-enable).
         gradient_checkpointing=gc and not cfg.get("load_4bit"),
         gradient_checkpointing_kwargs={"use_reentrant": False},
+        optim=cfg.get("optim", "adamw_torch"),
         logging_steps=5, save_strategy="no", report_to=[],
     )
     collator = DataCollatorForSeq2Seq(tok, padding=True, label_pad_token_id=-100)
