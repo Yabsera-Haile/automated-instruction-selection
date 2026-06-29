@@ -113,6 +113,8 @@ def main() -> None:
     ap.add_argument("--base_model", default=BASE_MODEL)
     ap.add_argument("--limit", type=int, default=200,
                     help="Examples per task (0 = full; default 200 keeps 10-model eval tractable).")
+    ap.add_argument("--conditions", nargs="*", default=None,
+                    help="Only evaluate these conditions (e.g. base) — for a quick sanity pass.")
     ap.add_argument("--no_chat_template", action="store_true")
     args = ap.parse_args()
 
@@ -123,6 +125,8 @@ def main() -> None:
     apply_ct = not args.no_chat_template
     os.makedirs(args.out_dir, exist_ok=True)
     models = enumerate_models(args.ckpt_dir)
+    if args.conditions:
+        models = [m for m in models if m[0] in args.conditions]
     print(f"Evaluating {len(models)} models on {len(belebele_tasks)} Belebele langs + "
           f"{list(SKILL_TASKS)} (limit={args.limit or 'full'}, chat_template={apply_ct})")
 
