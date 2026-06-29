@@ -18,6 +18,10 @@ import time
 # Reduce fragmentation-driven OOM (the error message recommends this); must be set
 # before torch initializes CUDA, so set it at import time.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+# Pin to ONE GPU so the HF Trainer doesn't wrap the model in DataParallel across the 3
+# cards (which, together with device_map, prevented gradient checkpointing from engaging
+# and caused the OOMs). Override by exporting CUDA_VISIBLE_DEVICES before running.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 
 def load_cfg(path: str) -> dict:
@@ -81,11 +85,19 @@ def main() -> None:
             load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4")
     gc = cfg.get("gradient_checkpointing", True)
-    model = AutoModelForCausalLM.from_pretrained(model_name, device_map={"": 0}, **load_kwargs)
+    # No device_map for bf16: device_map={"":0} prevented gradient checkpointing from
+    # engaging. Load to CPU and let the Trainer place it on the (single visible) GPU.
+    # 4-bit still needs device_map.
+    device_map = {"": 0} if cfg.get("load_4bit") else None
+    model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, **load_kwargs)
     model.config.use_cache = False
     if cfg.get("load_4bit"):
         from peft import prepare_model_for_kbit_training
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=gc)
+    elif gc:
+        # Enable checkpointing explicitly on the BASE before LoRA. Relying on
+        # TrainingArguments alone did not free activations (the OOM was seq-independent).
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     lora = LoraConfig(
         r=cfg["lora_rank"], lora_alpha=cfg["lora_alpha"], lora_dropout=cfg["lora_dropout"],
@@ -105,10 +117,10 @@ def main() -> None:
         warmup_ratio=cfg["warmup_ratio"],
         weight_decay=cfg.get("weight_decay", 0.0),
         bf16=cfg.get("bf16", True),
-        # 4-bit path already enabled checkpointing via prepare_model_for_kbit_training;
-        # for bf16 let the Trainer enable it (avoids double-enable).
-        gradient_checkpointing=gc and not cfg.get("load_4bit"),
-        gradient_checkpointing_kwargs={"use_reentrant": False},
+        # Gradient checkpointing is enabled manually on the model above (base
+        # gradient_checkpointing_enable / prepare_model_for_kbit_training), so the Trainer
+        # must NOT toggle it again.
+        gradient_checkpointing=False,
         optim=cfg.get("optim", "adamw_torch"),
         logging_steps=5, save_strategy="no", report_to=[],
     )
