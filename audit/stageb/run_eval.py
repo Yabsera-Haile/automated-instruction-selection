@@ -1,21 +1,23 @@
-"""B-Step 4 [SERVER]: evaluate the 9 fine-tuned models + the no-SFT base.
+"""B-Step 4 [SERVER]: evaluate Stage-B models via lm-evaluation-harness, two-wave.
 
-Uses EleutherAI lm-evaluation-harness (CLI) with the model's chat template (matching
-training). Per model, three lm_eval calls to respect per-task few-shot:
-  A) Belebele (the held-out per-language metric, 16 langs) + IFEval + MBPP  [task defaults]
-  B) GSM8K  --num_fewshot 8
-  C) MMLU   --num_fewshot 5
-TydiQA is deliberately NOT used (RDS+ retrieves toward it -> contaminated). Belebele is
-held out for every selector.
+Two task groups (run one --group at a time):
+  fast (loglikelihood): Belebele (16 eval langs) + MMLU        -> batch 16
+  slow (generation)   : IFEval (max_gen_toks 512) + MBPP (256, code-exec)
+                        + GSM8K (8-shot, 512)                  -> batch 8
 
-Outputs raw per-model JSON to audit/results/stageb/eval/<condition>__b<budget>.json and a
-tidy audit/results/stageb/stageb_results.parquet with columns
-[condition, budget, task, group_type(language|skill|average), group, score].
+Fixes vs the first version: explicit batch size (auto collapsed to 1); capped generation
+length for the slow group; and 3-GPU parallelism (one model per GPU, round-robin) instead
+of sequential. All models use the model's chat template (matching training). TydiQA is
+never used (RDS+ contamination); Belebele is held out.
 
-Run on the server (single GPU). First: pip install "lm-eval" (ifeval/mbpp need extras +
-code execution). Example:
-    pip install "lm-eval[ifeval]"
-    HF_ALLOW_CODE_EVAL=1 python -m audit.stageb.run_eval --limit 200
+Per-model results are MERGED into audit/results/stageb/eval/<tag>.json (prior tasks/waves
+preserved), and a tidy audit/results/stageb/stageb_results.parquet is (re)assembled from
+every eval/*.json present. The four already-finished JSONs are never in --conditions, so
+they are not re-run or overwritten.
+
+Wave 1 (this run):
+    python -m audit.stageb.run_eval --group fast \
+        --conditions perplexity-low quality random --limit 200
 """
 from __future__ import annotations
 
@@ -26,28 +28,18 @@ import os
 import subprocess
 import sys
 
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 os.environ.setdefault("HF_ALLOW_CODE_EVAL", "1")   # MBPP executes generated code
 
 BASE_MODEL = "Qwen/Qwen2.5-7B"
 
-# our eval iso -> Belebele/FLORES-200 task suffix (lm-eval task = belebele_<flores>)
 ISO_TO_FLORES = {
     "eng": "eng_Latn", "ceb": "ceb_Latn", "plt": "plt_Latn", "bod": "bod_Tibt",
     "yor": "yor_Latn", "tsn": "tsn_Latn", "som": "som_Latn", "kir": "kir_Cyrl",
     "fuv": "fuv_Latn", "hau": "hau_Latn", "wol": "wol_Latn", "mlt": "mlt_Latn",
     "zul": "zul_Latn", "spa": "spa_Latn", "cmn": "zho_Hans", "arb": "arb_Arab",
 }
-FLORES_TO_ISO = {v: k for k, v in ISO_TO_FLORES.items()}
-
-# skill task -> (skill_label, num_fewshot or None for harness default)
-SKILL_TASKS = {
-    "gsm8k": ("math", 8),
-    "mmlu": ("general", 5),
-    "mbpp": ("code", None),
-    "ifeval": ("instruction_following", None),
-}
-# primary metric candidates per task (lm-eval keys look like "acc,none")
+SKILL_OF = {"gsm8k": "math", "mmlu": "general", "mbpp": "code",
+            "ifeval": "instruction_following"}
 METRIC_CANDIDATES = {
     "belebele": ["acc,none", "acc_norm,none", "acc"],
     "mmlu": ["acc,none", "acc"],
@@ -59,33 +51,49 @@ METRIC_CANDIDATES = {
 }
 
 
+def group_calls(group: str, belebele_tasks: list[str]):
+    """Return list of (name, tasks, num_fewshot, gen_kwargs, code_exec)."""
+    if group == "fast":
+        return [
+            ("belebele", belebele_tasks, None, None, False),   # loglik, task-default shots
+            ("mmlu", ["mmlu"], 5, None, False),                # loglik, 5-shot
+        ]
+    return [  # slow / generation
+        ("ifeval", ["ifeval"], None, "max_gen_toks=512", False),
+        ("mbpp", ["mbpp"], None, "max_gen_toks=256", True),
+        ("gsm8k", ["gsm8k"], 8, "max_gen_toks=512", False),
+    ]
+
+
 def pick_metric(results: dict, task_key: str, kind: str):
     r = results.get(task_key, {})
     for c in METRIC_CANDIDATES.get(kind, []):
         if c in r and isinstance(r[c], (int, float)):
             return float(r[c])
-    for k, v in r.items():  # fallback: first non-stderr numeric
+    for k, v in r.items():
         if isinstance(v, (int, float)) and "stderr" not in k:
             return float(v)
     return None
 
 
-def run_lm_eval(model_args: str, tasks: list[str], num_fewshot, workdir: str,
-                limit: int, apply_chat_template: bool) -> dict:
+def run_lm_eval(model_args, tasks, num_fewshot, gen_kwargs, code_exec, workdir,
+                batch_size, limit, apply_ct) -> dict:
     os.makedirs(workdir, exist_ok=True)
-    cmd = [sys.executable, "-m", "lm_eval", "--model", "hf",
-           "--model_args", model_args, "--tasks", ",".join(tasks),
-           "--batch_size", "auto", "--output_path", workdir,
-           "--confirm_run_unsafe_code"]
-    if apply_chat_template:
+    cmd = [sys.executable, "-m", "lm_eval", "--model", "hf", "--model_args", model_args,
+           "--tasks", ",".join(tasks), "--batch_size", str(batch_size),
+           "--output_path", workdir]
+    if apply_ct:
         cmd.append("--apply_chat_template")
+    if code_exec:
+        cmd.append("--confirm_run_unsafe_code")
     if num_fewshot is not None:
         cmd += ["--num_fewshot", str(num_fewshot)]
+    if gen_kwargs:
+        cmd += ["--gen_kwargs", gen_kwargs]
     if limit and limit > 0:
         cmd += ["--limit", str(limit)]
-    print("  $ " + " ".join(cmd))
+    print("  $ " + " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
-    # lm-eval writes <workdir>/<sanitized_model>/results_<ts>.json
     files = sorted(glob.glob(os.path.join(workdir, "**", "results*.json"), recursive=True),
                    key=os.path.getmtime)
     if not files:
@@ -94,78 +102,63 @@ def run_lm_eval(model_args: str, tasks: list[str], num_fewshot, workdir: str,
 
 
 def enumerate_models(ckpt_dir: str):
-    models = [("base", 0.0, None)]
+    models = [("base", 0.0, None)]  # (tag-cond, budget, adapter path)
     for d in sorted(glob.glob(os.path.join(ckpt_dir, "*__b*"))):
-        if not os.path.isdir(d):
-            continue
-        name = os.path.basename(d)
-        cond, _, budget = name.rpartition("__b")
-        models.append((cond, float(budget), d))
+        if os.path.isdir(d):
+            cond, _, budget = os.path.basename(d).rpartition("__b")
+            models.append((cond, float(budget), d))
     return models
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Stage-B evaluation driver (lm-eval).")
-    ap.add_argument("--ckpt_dir", default="audit/results/stageb/checkpoints")
-    ap.add_argument("--eval_langs", default="audit/configs/eval_languages.json")
-    ap.add_argument("--out_dir", default="audit/results/stageb/eval")
-    ap.add_argument("--work_dir", default="audit/results/stageb/eval_work")
-    ap.add_argument("--base_model", default=BASE_MODEL)
-    ap.add_argument("--limit", type=int, default=200,
-                    help="Examples per task (0 = full; default 200 keeps 10-model eval tractable).")
-    ap.add_argument("--conditions", nargs="*", default=None,
-                    help="Only evaluate these conditions (e.g. base) — for a quick sanity pass.")
-    ap.add_argument("--no_chat_template", action="store_true")
-    args = ap.parse_args()
+def tag_of(cond, budget, adapter):
+    return "base" if adapter is None else f"{cond}__b{budget}"
 
-    langs = json.load(open(args.eval_langs, encoding="utf-8"))["languages"]
-    role = {e["iso"]: e["role"] for e in langs}
+
+def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
+             batch_size, limit, apply_ct):
+    tag = tag_of(cond, budget, adapter)
+    margs = f"pretrained={base_model},dtype=bfloat16"
+    if adapter is not None:
+        margs += f",peft={adapter}"
+    langs = json.load(open("audit/configs/eval_languages.json", encoding="utf-8"))["languages"]
     belebele_tasks = [f"belebele_{ISO_TO_FLORES[e['iso']]}" for e in langs
                       if e["iso"] in ISO_TO_FLORES]
-    apply_ct = not args.no_chat_template
-    os.makedirs(args.out_dir, exist_ok=True)
-    models = enumerate_models(args.ckpt_dir)
-    if args.conditions:
-        models = [m for m in models if m[0] in args.conditions]
-    print(f"Evaluating {len(models)} models on {len(belebele_tasks)} Belebele langs + "
-          f"{list(SKILL_TASKS)} (limit={args.limit or 'full'}, chat_template={apply_ct})")
+    path = os.path.join(out_dir, f"{tag}.json")
+    results = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+    for name, tasks, nfs, genkw, codex in group_calls(group, belebele_tasks):
+        r = run_lm_eval(margs, tasks, nfs, genkw, codex,
+                        os.path.join(work_dir, tag, name), batch_size, limit, apply_ct)
+        results.update(r)   # MERGE — never drop prior tasks/waves
+    os.makedirs(out_dir, exist_ok=True)
+    json.dump(results, open(path, "w"), indent=2)
+    print(f"[{tag}] merged {group} group -> {path}", flush=True)
 
+
+def assemble_parquet(out_dir: str, eval_langs: str):
+    import pandas as pd
+    langs = json.load(open(eval_langs, encoding="utf-8"))["languages"]
+    role = {e["iso"]: e["role"] for e in langs}
     rows = []
-    for cond, budget, adapter in models:
-        tag = "base" if adapter is None else f"{cond}__b{budget}"
-        margs = f"pretrained={args.base_model},dtype=bfloat16"
-        if adapter is not None:
-            margs += f",peft={adapter}"
-        print(f"\n=== {tag} ===")
-        results = {}
-        groups = [
-            (belebele_tasks + ["ifeval", "mbpp"], None, "A"),
-            (["gsm8k"], 8, "B"),
-            (["mmlu"], 5, "C"),
-        ]
-        for tasks, nfs, gname in groups:
-            try:
-                r = run_lm_eval(margs, tasks, nfs, os.path.join(args.work_dir, tag, gname),
-                                args.limit, apply_ct)
-                results.update(r)
-            except Exception as exc:  # keep going; record what we got
-                print(f"  !! group {gname} failed for {tag}: {exc}")
-        json.dump(results, open(os.path.join(args.out_dir, f"{tag}.json"), "w"), indent=2)
-
-        # ---- tidy rows ----
+    for path in sorted(glob.glob(os.path.join(out_dir, "*.json"))):
+        tag = os.path.splitext(os.path.basename(path))[0]
+        cond, _, budget = tag.rpartition("__b")
+        if tag == "base":
+            cond, budget = "base", 0.0
+        budget = float(budget)
+        results = json.load(open(path, encoding="utf-8"))
         lowres, controls = [], []
-        for iso in (e["iso"] for e in langs):
-            tk = f"belebele_{ISO_TO_FLORES.get(iso, '')}"
-            score = pick_metric(results, tk, "belebele")
+        for e in langs:
+            iso = e["iso"]
+            score = pick_metric(results, f"belebele_{ISO_TO_FLORES.get(iso, '')}", "belebele")
             if score is None:
                 continue
             rows.append([cond, budget, "belebele", "language", iso, score])
             (lowres if role.get(iso) == "low_resource" else controls).append(score)
         skill_scores = []
-        for task, (skill, _) in SKILL_TASKS.items():
+        for task, skill in SKILL_OF.items():
             score = pick_metric(results, task, task)
-            rows.append([cond, budget, task, "skill", skill, score])
             if score is not None:
+                rows.append([cond, budget, task, "skill", skill, score])
                 skill_scores.append(score)
         mmlu = pick_metric(results, "mmlu", "mmlu")
         if mmlu is not None:
@@ -179,14 +172,81 @@ def main() -> None:
         if controls:
             rows.append([cond, budget, "belebele", "average", "control_macro",
                          sum(controls) / len(controls)])
-
-    import pandas as pd
     df = pd.DataFrame(rows, columns=["condition", "budget", "task", "group_type",
                                      "group", "score"])
-    out_parquet = os.path.join(os.path.dirname(args.out_dir), "stageb_results.parquet")
-    df.to_parquet(out_parquet, index=False)
-    print(f"\nWrote {len(df)} rows -> {out_parquet}")
+    out = os.path.join(os.path.dirname(out_dir), "stageb_results.parquet")
+    df.to_parquet(out, index=False)
+    print(f"\nAssembled {len(df)} rows from {len(glob.glob(os.path.join(out_dir,'*.json')))} "
+          f"models -> {out}")
     print(df[df.group_type == "average"].to_string(index=False))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Stage-B two-wave evaluation (lm-eval).")
+    ap.add_argument("--group", choices=["fast", "slow"], required=True)
+    ap.add_argument("--conditions", nargs="*", default=None,
+                    help="Condition names to eval (e.g. perplexity-low quality random).")
+    ap.add_argument("--ckpt_dir", default="audit/results/stageb/checkpoints")
+    ap.add_argument("--eval_langs", default="audit/configs/eval_languages.json")
+    ap.add_argument("--out_dir", default="audit/results/stageb/eval")
+    ap.add_argument("--work_dir", default="audit/results/stageb/eval_work")
+    ap.add_argument("--base_model", default=BASE_MODEL)
+    ap.add_argument("--limit", type=int, default=200, help="Examples per task (0=full).")
+    ap.add_argument("--batch_size", type=int, default=None,
+                    help="Default 16 (fast) / 8 (slow).")
+    ap.add_argument("--gpus", default="0,1,2", help="GPUs to distribute models across.")
+    ap.add_argument("--no_chat_template", action="store_true")
+    ap.add_argument("--assemble_only", action="store_true")
+    # worker mode (internal): eval exactly these tags on the single visible GPU
+    ap.add_argument("--worker_tags", nargs="*", default=None)
+    args = ap.parse_args()
+
+    batch = args.batch_size or (16 if args.group == "fast" else 8)
+    apply_ct = not args.no_chat_template
+
+    if args.assemble_only:
+        assemble_parquet(args.out_dir, args.eval_langs)
+        return
+
+    all_models = enumerate_models(args.ckpt_dir)
+    if args.worker_tags is not None:          # ---- worker: eval given tags here ----
+        want = set(args.worker_tags)
+        for cond, budget, adapter in all_models:
+            if tag_of(cond, budget, adapter) in want:
+                eval_one(cond, budget, adapter, args.group, args.out_dir, args.work_dir,
+                         args.base_model, batch, args.limit, apply_ct)
+        return
+
+    # ---- orchestrator: pick models, round-robin across GPUs, spawn one worker/GPU ----
+    models = [m for m in all_models if args.conditions is None or m[0] in args.conditions]
+    tags = [tag_of(*m) for m in models]
+    gpus = [g.strip() for g in args.gpus.split(",") if g.strip()]
+    buckets = {g: [] for g in gpus}
+    for i, t in enumerate(tags):
+        buckets[gpus[i % len(gpus)]].append(t)
+    print(f"Group={args.group} batch={batch} limit={args.limit or 'full'} chat={apply_ct}")
+    print("GPU assignment:", {g: b for g, b in buckets.items() if b})
+
+    os.makedirs(args.work_dir, exist_ok=True)
+    procs = []
+    for g, btags in buckets.items():
+        if not btags:
+            continue
+        env = dict(os.environ, CUDA_VISIBLE_DEVICES=g)
+        cmd = [sys.executable, "-m", "audit.stageb.run_eval", "--group", args.group,
+               "--worker_tags", *btags, "--limit", str(args.limit),
+               "--batch_size", str(batch), "--base_model", args.base_model,
+               "--ckpt_dir", args.ckpt_dir, "--out_dir", args.out_dir,
+               "--work_dir", args.work_dir]
+        if args.no_chat_template:
+            cmd.append("--no_chat_template")
+        logf = open(os.path.join(args.work_dir, f"worker_gpu{g}.log"), "w")
+        print(f"  launching GPU{g}: {btags}  (log: {logf.name})")
+        procs.append((g, subprocess.Popen(cmd, env=env, stdout=logf, stderr=subprocess.STDOUT)))
+    failed = [g for g, p in procs if p.wait() != 0]
+    if failed:
+        print(f"!! workers on GPUs {failed} exited non-zero — check their logs in {args.work_dir}")
+    assemble_parquet(args.out_dir, args.eval_langs)
 
 
 if __name__ == "__main__":
