@@ -29,6 +29,9 @@ import subprocess
 import sys
 
 os.environ.setdefault("HF_ALLOW_CODE_EVAL", "1")   # MBPP executes generated code
+# Reduce fragmentation-driven OOM (lm_eval's OOM message recommends this); inherited by
+# the worker subprocesses and their lm_eval children.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 BASE_MODEL = "Qwen/Qwen2.5-7B"
 
