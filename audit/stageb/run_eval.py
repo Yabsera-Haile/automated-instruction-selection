@@ -101,6 +101,15 @@ def run_lm_eval(model_args, tasks, num_fewshot, gen_kwargs, code_exec, workdir,
     return json.load(open(files[-1], encoding="utf-8")).get("results", {})
 
 
+def have_all(results: dict, tasks: list[str]) -> bool:
+    """True iff every task in `tasks` already has a usable metric in `results`."""
+    for t in tasks:
+        kind = "belebele" if t.startswith("belebele") else t
+        if pick_metric(results, t, kind) is None:
+            return False
+    return True
+
+
 def enumerate_models(ckpt_dir: str):
     models = [("base", 0.0, None)]  # (tag-cond, budget, adapter path)
     for d in sorted(glob.glob(os.path.join(ckpt_dir, "*__b*"))):
@@ -124,14 +133,18 @@ def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
     belebele_tasks = [f"belebele_{ISO_TO_FLORES[e['iso']]}" for e in langs
                       if e["iso"] in ISO_TO_FLORES]
     path = os.path.join(out_dir, f"{tag}.json")
+    os.makedirs(out_dir, exist_ok=True)
     results = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
     for name, tasks, nfs, genkw, codex in group_calls(group, belebele_tasks):
+        if have_all(results, tasks):
+            print(f"[{tag}] {name}: already present, skipping", flush=True)
+            continue
         r = run_lm_eval(margs, tasks, nfs, genkw, codex,
                         os.path.join(work_dir, tag, name), batch_size, limit, apply_ct)
-        results.update(r)   # MERGE — never drop prior tasks/waves
-    os.makedirs(out_dir, exist_ok=True)
-    json.dump(results, open(path, "w"), indent=2)
-    print(f"[{tag}] merged {group} group -> {path}", flush=True)
+        results.update(r)                       # MERGE — never drop prior tasks/waves
+        json.dump(results, open(path, "w"), indent=2)   # SAVE after each call (resumable)
+        print(f"[{tag}] {name}: saved -> {path}", flush=True)
+    print(f"[{tag}] {group} group complete", flush=True)
 
 
 def assemble_parquet(out_dir: str, eval_langs: str):
