@@ -25,17 +25,21 @@ import os
 
 logger = logging.getLogger("audit.stageb.materialize_subsets")
 
-# (condition, selection filename or None for full, budget)
-CELLS = [
-    ("full", None, 1.0),
-    ("random", "random__b0.05__s0.json", 0.05),
-    ("random", "random__b0.1__s0.json", 0.10),
-    ("perplexity-low", "perplexity-low__b0.05__s0.json", 0.05),
-    ("perplexity-low", "perplexity-low__b0.1__s0.json", 0.10),
-    ("quality", "quality__b0.05__s0.json", 0.05),
-    ("quality", "quality__b0.1__s0.json", 0.10),
-    ("perplexity-high", "perplexity-high__b0.05__s0.json", 0.05),
-    ("perplexity-high", "perplexity-high__b0.1__s0.json", 0.10),
+# (condition, selection filename or None for full, budget). R2 expands the Round-1
+# matrix with a 1% (0.01) budget per selector -- the point where Stage-A distortion is
+# most extreme (~108 rows, so noisy: report with that caveat). 0.05/0.10/full unchanged.
+SELECTORS = ["random", "perplexity-low", "quality", "perplexity-high"]
+BUDGETS = [0.01, 0.05, 0.10]
+
+
+def sel_filename(selector: str, budget: float) -> str:
+    """Stage-A selection JSON name (seed 0), e.g. random__b0.01__s0.json. Float str
+    matches Stage-A output: 0.01->'0.01', 0.05->'0.05', 0.10->'0.1'."""
+    return f"{selector}__b{budget}__s0.json"
+
+
+CELLS = [("full", None, 1.0)] + [
+    (sel, sel_filename(sel, b), b) for sel in SELECTORS for b in BUDGETS
 ]
 
 
@@ -67,12 +71,16 @@ def main() -> None:
                     help="Enriched pilot pool jsonl (id + messages).")
     ap.add_argument("--selections_dir", default="audit/stageb/data/sel")
     ap.add_argument("--out_dir", default="audit/results/stageb/subsets")
+    ap.add_argument("--budgets", nargs="*", type=float, default=None,
+                    help="Only materialize these budgets (e.g. 0.01). Default: all.")
     args = ap.parse_args()
+
+    cells = [c for c in CELLS if args.budgets is None or c[2] in args.budgets]
 
     missing = []
     if not os.path.exists(args.pool):
         missing.append(args.pool)
-    for _, fn, _ in CELLS:
+    for _, fn, _ in cells:
         if fn and not os.path.exists(os.path.join(args.selections_dir, fn)):
             missing.append(os.path.join(args.selections_dir, fn))
     if missing:
@@ -97,7 +105,7 @@ def main() -> None:
     os.makedirs(args.out_dir, exist_ok=True)
 
     all_ok = True
-    for condition, fn, budget in CELLS:
+    for condition, fn, budget in cells:
         if fn is None:  # full-data = all unique trainable rows
             rows = list(by_id.values())
             nominal = n_unique
@@ -139,10 +147,10 @@ def main() -> None:
                     "OK" if balanced else "UNBALANCED!", "" if balanced else " <--")
 
     logger.info("=" * 60)
-    logger.info("ACCEPTANCE: %s — 9 subsets in %s; every row has a user+assistant "
+    logger.info("ACCEPTANCE: %s — %d subsets in %s; every row has a user+assistant "
                 "message with content; counts reconcile to budget minus dropped "
                 "dup-id/empty-target rows.",
-                "PASS" if all_ok else "FAIL", args.out_dir)
+                "PASS" if all_ok else "FAIL", len(cells), args.out_dir)
     if not all_ok:
         raise SystemExit(1)
 
