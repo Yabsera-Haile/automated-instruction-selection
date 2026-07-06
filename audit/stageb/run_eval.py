@@ -53,6 +53,9 @@ METRIC_CANDIDATES = {
                "prompt_level_loose_acc,none"],
 }
 
+CHANCE = 0.25            # Belebele is 4-way multiple choice
+ABOVE_CHANCE_Z = 1.645   # one-sided 95%: base acc - z*stderr > CHANCE => "above chance"
+
 
 def group_calls(group: str, belebele_tasks: list[str]):
     """Return list of (name, tasks, num_fewshot, gen_kwargs, code_exec)."""
@@ -150,10 +153,52 @@ def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
     print(f"[{tag}] {group} group complete", flush=True)
 
 
+def belebele_acc_stderr(results: dict, task_key: str):
+    """(acc, stderr) for a Belebele task, using lm-eval's reported stderr when present."""
+    r = results.get(task_key, {})
+    for base_key in ("acc", "acc_norm"):
+        if isinstance(r.get(f"{base_key},none"), (int, float)):
+            se = r.get(f"{base_key}_stderr,none")
+            return float(r[f"{base_key},none"]), (float(se) if isinstance(se, (int, float)) else None)
+    v = pick_metric(results, task_key, "belebele")
+    return (v, None) if v is not None else (None, None)
+
+
+def above_chance_set(out_dir: str, langs: list[dict], role: dict) -> set:
+    """Eval languages the no-SFT BASE does meaningfully above chance (one-sided 95% lower
+    bound > 0.25). Recorded to <model_dir>/abovechance_languages.json. On a weak base this
+    may be only the high-resource controls (or empty) -- reported honestly either way."""
+    base_path = os.path.join(out_dir, "base.json")
+    details, keep = [], set()
+    if os.path.exists(base_path):
+        results = json.load(open(base_path, encoding="utf-8"))
+        for e in langs:
+            iso = e["iso"]
+            acc, se = belebele_acc_stderr(results, f"belebele_{ISO_TO_FLORES.get(iso, '')}")
+            if acc is None:
+                continue
+            lb = acc - ABOVE_CHANCE_Z * se if se is not None else acc
+            passed = lb > CHANCE
+            if passed:
+                keep.add(iso)
+            details.append({"iso": iso, "role": role.get(iso), "base_acc": round(acc, 4),
+                            "base_stderr": (round(se, 4) if se is not None else None),
+                            "lower_bound": round(lb, 4), "above_chance": passed})
+    rec = {"rule": f"base Belebele acc - {ABOVE_CHANCE_Z}*stderr > {CHANCE} (one-sided 95%)",
+           "chance": CHANCE, "z": ABOVE_CHANCE_Z, "n_above_chance": len(keep),
+           "above_chance_isos": sorted(keep),
+           "note": "empty/controls-only is a valid, honest outcome for a small base",
+           "languages": details}
+    with open(os.path.join(os.path.dirname(out_dir), "abovechance_languages.json"), "w") as f:
+        json.dump(rec, f, indent=2)
+    return keep
+
+
 def assemble_parquet(out_dir: str, eval_langs: str):
     import pandas as pd
     langs = json.load(open(eval_langs, encoding="utf-8"))["languages"]
     role = {e["iso"]: e["role"] for e in langs}
+    keep = above_chance_set(out_dir, langs, role)   # from base.json; recorded to json
     rows = []
     for path in sorted(glob.glob(os.path.join(out_dir, "*.json"))):
         tag = os.path.splitext(os.path.basename(path))[0]
@@ -162,7 +207,7 @@ def assemble_parquet(out_dir: str, eval_langs: str):
             cond, budget = "base", 0.0
         budget = float(budget)
         results = json.load(open(path, encoding="utf-8"))
-        lowres, controls = [], []
+        lowres, controls, abovechance = [], [], []
         for e in langs:
             iso = e["iso"]
             score = pick_metric(results, f"belebele_{ISO_TO_FLORES.get(iso, '')}", "belebele")
@@ -170,6 +215,8 @@ def assemble_parquet(out_dir: str, eval_langs: str):
                 continue
             rows.append([cond, budget, "belebele", "language", iso, score])
             (lowres if role.get(iso) == "low_resource" else controls).append(score)
+            if iso in keep:
+                abovechance.append(score)
         skill_scores = []
         for task, skill in SKILL_OF.items():
             score = pick_metric(results, task, task)
@@ -182,17 +229,22 @@ def assemble_parquet(out_dir: str, eval_langs: str):
         if skill_scores:
             rows.append([cond, budget, "skill_macro", "average", "skill_macro",
                          sum(skill_scores) / len(skill_scores)])
-        if lowres:
+        if lowres:  # view (a): full 12-language low-resource macro
             rows.append([cond, budget, "belebele", "average", "lowres_macro",
                          sum(lowres) / len(lowres)])
         if controls:
             rows.append([cond, budget, "belebele", "average", "control_macro",
                          sum(controls) / len(controls)])
+        if abovechance:  # view (b): macro over base-above-chance languages only
+            rows.append([cond, budget, "belebele", "average", "abovechance_macro",
+                         sum(abovechance) / len(abovechance)])
     df = pd.DataFrame(rows, columns=["condition", "budget", "task", "group_type",
                                      "group", "score"])
     out = os.path.join(os.path.dirname(out_dir), "stageb_results.parquet")
     df.to_parquet(out, index=False)
-    print(f"\nAssembled {len(df)} rows from {len(glob.glob(os.path.join(out_dir,'*.json')))} "
+    print(f"\nAbove-chance languages (base one-sided 95% lb > {CHANCE}): "
+          f"{sorted(keep) or 'NONE (base at chance on all eval languages)'}")
+    print(f"Assembled {len(df)} rows from {len(glob.glob(os.path.join(out_dir,'*.json')))} "
           f"models -> {out}")
     print(df[df.group_type == "average"].to_string(index=False))
 
