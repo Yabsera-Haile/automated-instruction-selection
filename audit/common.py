@@ -67,6 +67,13 @@ def results_base(dev: bool) -> str:
     return DEV_RESULTS_DIR if dev else RESULTS_DIR
 
 
+def model_slug(model: str) -> str:
+    """Filesystem-safe tag for a model id, used to route Stage-B outputs to a
+    per-model subtree so multiple target models don't collide.
+    'Qwen/Qwen2.5-1.5B' -> 'qwen2.5-1.5b'; 'Qwen/Qwen2.5-7B' -> 'qwen2.5-7b'."""
+    return model.split("/")[-1].lower().replace("_", "-")
+
+
 def announce_dev(dev: bool, logger: logging.Logger) -> None:
     if dev:
         logger.warning(DEV_WARNING)
