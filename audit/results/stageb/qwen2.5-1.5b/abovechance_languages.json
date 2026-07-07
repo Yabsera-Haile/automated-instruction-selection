@@ -1,0 +1,138 @@
+{
+  "rule": "base Belebele acc - 1.645*stderr > 0.25 (one-sided 95%)",
+  "chance": 0.25,
+  "z": 1.645,
+  "n_above_chance": 0,
+  "above_chance_isos": [],
+  "note": "empty/controls-only is a valid, honest outcome for a small base",
+  "languages": [
+    {
+      "iso": "ceb",
+      "role": "low_resource",
+      "base_acc": 0.225,
+      "base_stderr": 0.0296,
+      "lower_bound": 0.1763,
+      "above_chance": false
+    },
+    {
+      "iso": "plt",
+      "role": "low_resource",
+      "base_acc": 0.275,
+      "base_stderr": 0.0317,
+      "lower_bound": 0.2229,
+      "above_chance": false
+    },
+    {
+      "iso": "bod",
+      "role": "low_resource",
+      "base_acc": 0.245,
+      "base_stderr": 0.0305,
+      "lower_bound": 0.1948,
+      "above_chance": false
+    },
+    {
+      "iso": "yor",
+      "role": "low_resource",
+      "base_acc": 0.26,
+      "base_stderr": 0.0311,
+      "lower_bound": 0.2089,
+      "above_chance": false
+    },
+    {
+      "iso": "tsn",
+      "role": "low_resource",
+      "base_acc": 0.29,
+      "base_stderr": 0.0322,
+      "lower_bound": 0.2371,
+      "above_chance": false
+    },
+    {
+      "iso": "som",
+      "role": "low_resource",
+      "base_acc": 0.22,
+      "base_stderr": 0.0294,
+      "lower_bound": 0.1717,
+      "above_chance": false
+    },
+    {
+      "iso": "kir",
+      "role": "low_resource",
+      "base_acc": 0.26,
+      "base_stderr": 0.0311,
+      "lower_bound": 0.2089,
+      "above_chance": false
+    },
+    {
+      "iso": "fuv",
+      "role": "low_resource",
+      "base_acc": 0.2,
+      "base_stderr": 0.0284,
+      "lower_bound": 0.1534,
+      "above_chance": false
+    },
+    {
+      "iso": "hau",
+      "role": "low_resource",
+      "base_acc": 0.235,
+      "base_stderr": 0.0301,
+      "lower_bound": 0.1856,
+      "above_chance": false
+    },
+    {
+      "iso": "wol",
+      "role": "low_resource",
+      "base_acc": 0.265,
+      "base_stderr": 0.0313,
+      "lower_bound": 0.2135,
+      "above_chance": false
+    },
+    {
+      "iso": "mlt",
+      "role": "low_resource",
+      "base_acc": 0.24,
+      "base_stderr": 0.0303,
+      "lower_bound": 0.1902,
+      "above_chance": false
+    },
+    {
+      "iso": "zul",
+      "role": "low_resource",
+      "base_acc": 0.275,
+      "base_stderr": 0.0317,
+      "lower_bound": 0.2229,
+      "above_chance": false
+    },
+    {
+      "iso": "eng",
+      "role": "control",
+      "base_acc": 0.265,
+      "base_stderr": 0.0313,
+      "lower_bound": 0.2135,
+      "above_chance": false
+    },
+    {
+      "iso": "spa",
+      "role": "control",
+      "base_acc": 0.255,
+      "base_stderr": 0.0309,
+      "lower_bound": 0.2042,
+      "above_chance": false
+    },
+    {
+      "iso": "cmn",
+      "role": "control",
+      "base_acc": 0.26,
+      "base_stderr": 0.0311,
+      "lower_bound": 0.2089,
+      "above_chance": false
+    },
+    {
+      "iso": "arb",
+      "role": "control",
+      "base_acc": 0.26,
+      "base_stderr": 0.0311,
+      "lower_bound": 0.2089,
+      "above_chance": false
+    }
+  ]
+}
