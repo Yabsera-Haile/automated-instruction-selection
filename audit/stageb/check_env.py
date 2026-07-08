@@ -50,19 +50,28 @@ def load_model(model_id: str, kwargs: dict):
             raise e
 
 
-def check_chat_template(tok) -> None:
-    tmpl = getattr(tok, "chat_template", None)
-    if not tmpl:
-        print("chat_template: MISSING on this tokenizer -- must be supplied before "
-              "training (do NOT hardcode a Llama/Qwen format).")
-        return
-    print("chat_template: present.")
+def check_chat_template(tok, model_id: str) -> None:
+    from audit.common import ensure_chat_template
+    if getattr(tok, "chat_template", None):
+        print("chat_template: present on tokenizer.")
+    else:
+        ensure_chat_template(tok, model_id)
+        if getattr(tok, "chat_template", None):
+            print("chat_template: MISSING on tokenizer -> supplied the family's official "
+                  "template via audit.common.ensure_chat_template. VERIFY the render below.")
+        else:
+            print("chat_template: MISSING and no family template available -- must supply.")
+            return
     full = tok.apply_chat_template(SAMPLE, tokenize=False, add_generation_prompt=False)
     prompt = tok.apply_chat_template(SAMPLE[:1], tokenize=False, add_generation_prompt=True)
+    ids = tok.apply_chat_template(SAMPLE, tokenize=True, add_generation_prompt=False)
+    n_bos = sum(1 for t in ids if t == tok.bos_token_id) if tok.bos_token_id is not None else 0
     print("--- rendered (full 2-turn, training form) ---")
     print(repr(full))
     print("--- rendered (user-only + generation prompt, eval form) ---")
     print(repr(prompt))
+    print(f"tokenized full: {len(ids)} tokens | BOS count = {n_bos} "
+          f"(want exactly 1 -- >1 means the template's bos_token double-adds with the tokenizer)")
 
 
 def main() -> None:
@@ -91,7 +100,7 @@ def main() -> None:
 
     print(f"\nLoading {args.model} in bf16 on cuda:0 ...")
     tok = AutoTokenizer.from_pretrained(args.model, **{k: v for k, v in kwargs.items() if k == "token"})
-    check_chat_template(tok)
+    check_chat_template(tok, args.model)
     model, loaded_via = load_model(args.model, kwargs)
 
     n_params = sum(p.numel() for p in model.parameters())

@@ -74,6 +74,28 @@ def model_slug(model: str) -> str:
     return model.split("/")[-1].lower().replace("_", "-")
 
 
+# Gemma base (`-pt`) tokenizers ship WITHOUT a chat template; the -it variants do. This is
+# Gemma's OWN official format (roles user/model, turns wrapped in <start_of_turn>..<end_of_turn>,
+# BOS prepended once) applied via apply_chat_template -- NOT a hardcoded Llama/Qwen format.
+GEMMA_CHAT_TEMPLATE = (
+    "{{ bos_token }}{% for message in messages %}"
+    "{{ '<start_of_turn>' + (message['role'] if message['role'] != 'assistant' else 'model') "
+    "+ '\n' + message['content'] | trim + '<end_of_turn>\n' }}{% endfor %}"
+    "{% if add_generation_prompt %}{{'<start_of_turn>model\n'}}{% endif %}"
+)
+
+
+def ensure_chat_template(tok, model_id: str):
+    """If the tokenizer has no chat template (Gemma `-pt` bases don't), supply the model
+    family's official one so apply_chat_template works identically for train and eval.
+    Returns the tokenizer. Only fills a MISSING template; never overrides an existing one."""
+    if getattr(tok, "chat_template", None):
+        return tok
+    if "gemma" in model_id.lower():
+        tok.chat_template = GEMMA_CHAT_TEMPLATE
+    return tok
+
+
 def announce_dev(dev: bool, logger: logging.Logger) -> None:
     if dev:
         logger.warning(DEV_WARNING)
