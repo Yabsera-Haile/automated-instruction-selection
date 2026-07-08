@@ -136,11 +136,13 @@ def tag_of(cond, budget, adapter):
 
 
 def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
-             batch_size, limit, apply_ct, model_type="hf"):
+             batch_size, limit, apply_ct, model_type="hf", extra_args=""):
     tag = tag_of(cond, budget, adapter)
     margs = f"pretrained={base_model},dtype=bfloat16"
     if adapter is not None:
         margs += f",peft={adapter}"
+    if extra_args:
+        margs += f",{extra_args}"
     langs = json.load(open("audit/configs/eval_languages.json", encoding="utf-8"))["languages"]
     belebele_tasks = [f"belebele_{ISO_TO_FLORES[e['iso']]}" for e in langs
                       if e["iso"] in ISO_TO_FLORES]
@@ -287,6 +289,10 @@ def main() -> None:
     ap.add_argument("--model_type", default="hf",
                     help="lm-eval --model backend: 'hf' (CausalLM) or 'hf-multimodal' "
                          "(vision-text Gemma-3 4B/12B).")
+    ap.add_argument("--model_args_extra", default=None,
+                    help="Extra key=val,... appended to lm-eval --model_args. Default: auto "
+                         "'add_bos_token=True,attn_implementation=eager' for Gemma (Gemma is "
+                         "at chance without BOS), '' otherwise. Pass '' to disable.")
     ap.add_argument("--limit", type=int, default=200, help="Examples per task (0=full).")
     ap.add_argument("--batch_size", type=int, default=None,
                     help="Default 16 (fast) / 8 (slow).")
@@ -299,6 +305,10 @@ def main() -> None:
 
     batch = args.batch_size or (16 if args.group == "fast" else 8)
     apply_ct = not args.no_chat_template
+    extra = args.model_args_extra
+    if extra is None:  # Gemma is at chance without add_bos_token=True; eager avoids attn issues
+        extra = ("add_bos_token=True,attn_implementation=eager"
+                 if "gemma" in args.base_model.lower() else "")
 
     if args.assemble_only:
         assemble_parquet(args.out_dir, args.eval_langs)
@@ -310,7 +320,7 @@ def main() -> None:
         for cond, budget, adapter in all_models:
             if tag_of(cond, budget, adapter) in want:
                 eval_one(cond, budget, adapter, args.group, args.out_dir, args.work_dir,
-                         args.base_model, batch, args.limit, apply_ct, args.model_type)
+                         args.base_model, batch, args.limit, apply_ct, args.model_type, extra)
         return
 
     # ---- orchestrator: pick models, round-robin across GPUs, spawn one worker/GPU ----
@@ -332,7 +342,7 @@ def main() -> None:
         cmd = [sys.executable, "-m", "audit.stageb.run_eval", "--group", args.group,
                "--worker_tags", *btags, "--limit", str(args.limit),
                "--batch_size", str(batch), "--base_model", args.base_model,
-               "--model_type", args.model_type,
+               "--model_type", args.model_type, "--model_args_extra", extra,
                "--ckpt_dir", args.ckpt_dir, "--out_dir", args.out_dir,
                "--work_dir", args.work_dir]
         if args.no_chat_template:
