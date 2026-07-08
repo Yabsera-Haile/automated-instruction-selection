@@ -71,6 +71,12 @@ def group_calls(group: str, belebele_tasks: list[str]):
     ]
 
 
+def get_metric(results: dict, task: str, key: str):
+    """Exact metric-key lookup (e.g. gsm8k 'exact_match,strict-match')."""
+    v = results.get(task, {}).get(key)
+    return float(v) if isinstance(v, (int, float)) else None
+
+
 def pick_metric(results: dict, task_key: str, kind: str):
     r = results.get(task_key, {})
     for c in METRIC_CANDIDATES.get(kind, []):
@@ -219,6 +225,15 @@ def assemble_parquet(out_dir: str, eval_langs: str):
                 abovechance.append(score)
         skill_scores = []
         for task, skill in SKILL_OF.items():
+            if task == "gsm8k":  # record both, macro uses the conservative strict-match
+                strict = get_metric(results, "gsm8k", "exact_match,strict-match")
+                flex = get_metric(results, "gsm8k", "exact_match,flexible-extract")
+                if strict is not None:
+                    rows.append([cond, budget, "gsm8k", "skill", "math_strict", strict])
+                    skill_scores.append(strict)
+                if flex is not None:
+                    rows.append([cond, budget, "gsm8k", "skill", "math_flexible", flex])
+                continue
             score = pick_metric(results, task, task)
             if score is not None:
                 rows.append([cond, budget, task, "skill", skill, score])
