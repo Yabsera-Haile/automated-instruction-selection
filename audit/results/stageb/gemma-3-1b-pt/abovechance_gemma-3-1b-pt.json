@@ -13,30 +13,30 @@
     "languages": [
       {
         "iso": "ceb",
-        "base_acc": 0.2822,
+        "base_acc": 0.2833,
         "base_stderr": 0.015,
-        "lower_bound": 0.2575,
+        "lower_bound": 0.2586,
         "above_chance": true
       },
       {
         "iso": "plt",
-        "base_acc": 0.2589,
+        "base_acc": 0.26,
         "base_stderr": 0.0146,
-        "lower_bound": 0.2349,
+        "lower_bound": 0.2359,
         "above_chance": false
       },
       {
         "iso": "bod",
-        "base_acc": 0.2644,
-        "base_stderr": 0.0147,
-        "lower_bound": 0.2402,
+        "base_acc": 0.2611,
+        "base_stderr": 0.0146,
+        "lower_bound": 0.237,
         "above_chance": false
       },
       {
         "iso": "yor",
-        "base_acc": 0.2367,
-        "base_stderr": 0.0142,
-        "lower_bound": 0.2133,
+        "base_acc": 0.2333,
+        "base_stderr": 0.0141,
+        "lower_bound": 0.2101,
         "above_chance": false
       },
       {
@@ -55,44 +55,44 @@
       },
       {
         "iso": "kir",
-        "base_acc": 0.2622,
-        "base_stderr": 0.0147,
-        "lower_bound": 0.2381,
+        "base_acc": 0.2522,
+        "base_stderr": 0.0145,
+        "lower_bound": 0.2284,
         "above_chance": false
       },
       {
         "iso": "fuv",
-        "base_acc": 0.2478,
-        "base_stderr": 0.0144,
-        "lower_bound": 0.2241,
+        "base_acc": 0.2433,
+        "base_stderr": 0.0143,
+        "lower_bound": 0.2198,
         "above_chance": false
       },
       {
         "iso": "hau",
-        "base_acc": 0.2656,
+        "base_acc": 0.2633,
         "base_stderr": 0.0147,
-        "lower_bound": 0.2413,
+        "lower_bound": 0.2392,
         "above_chance": false
       },
       {
         "iso": "wol",
-        "base_acc": 0.2667,
-        "base_stderr": 0.0147,
-        "lower_bound": 0.2424,
+        "base_acc": 0.2611,
+        "base_stderr": 0.0146,
+        "lower_bound": 0.237,
         "above_chance": false
       },
       {
         "iso": "mlt",
-        "base_acc": 0.2833,
+        "base_acc": 0.2844,
         "base_stderr": 0.015,
-        "lower_bound": 0.2586,
+        "lower_bound": 0.2597,
         "above_chance": true
       },
       {
         "iso": "zul",
-        "base_acc": 0.2722,
-        "base_stderr": 0.0148,
-        "lower_bound": 0.2478,
+        "base_acc": 0.2744,
+        "base_stderr": 0.0149,
+        "lower_bound": 0.25,
         "above_chance": false
       }
     ]
@@ -103,30 +103,30 @@
     "languages": [
       {
         "iso": "eng",
-        "base_acc": 0.2589,
-        "base_stderr": 0.0146,
-        "lower_bound": 0.2349,
+        "base_acc": 0.2489,
+        "base_stderr": 0.0144,
+        "lower_bound": 0.2252,
         "above_chance": false
       },
       {
         "iso": "spa",
-        "base_acc": 0.2711,
-        "base_stderr": 0.0148,
-        "lower_bound": 0.2467,
-        "above_chance": false
-      },
-      {
-        "iso": "cmn",
         "base_acc": 0.27,
         "base_stderr": 0.0148,
         "lower_bound": 0.2456,
         "above_chance": false
       },
       {
-        "iso": "arb",
-        "base_acc": 0.2589,
+        "iso": "cmn",
+        "base_acc": 0.2611,
         "base_stderr": 0.0146,
-        "lower_bound": 0.2349,
+        "lower_bound": 0.237,
+        "above_chance": false
+      },
+      {
+        "iso": "arb",
+        "base_acc": 0.2656,
+        "base_stderr": 0.0147,
+        "lower_bound": 0.2413,
         "above_chance": false
       }
     ]
