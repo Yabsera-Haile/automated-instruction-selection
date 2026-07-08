@@ -89,9 +89,9 @@ def pick_metric(results: dict, task_key: str, kind: str):
 
 
 def run_lm_eval(model_args, tasks, num_fewshot, gen_kwargs, code_exec, workdir,
-                batch_size, limit, apply_ct) -> dict:
+                batch_size, limit, apply_ct, model_type="hf") -> dict:
     os.makedirs(workdir, exist_ok=True)
-    cmd = [sys.executable, "-m", "lm_eval", "--model", "hf", "--model_args", model_args,
+    cmd = [sys.executable, "-m", "lm_eval", "--model", model_type, "--model_args", model_args,
            "--tasks", ",".join(tasks), "--batch_size", str(batch_size),
            "--output_path", workdir]
     if apply_ct:
@@ -136,7 +136,7 @@ def tag_of(cond, budget, adapter):
 
 
 def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
-             batch_size, limit, apply_ct):
+             batch_size, limit, apply_ct, model_type="hf"):
     tag = tag_of(cond, budget, adapter)
     margs = f"pretrained={base_model},dtype=bfloat16"
     if adapter is not None:
@@ -152,7 +152,8 @@ def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
             print(f"[{tag}] {name}: already present, skipping", flush=True)
             continue
         r = run_lm_eval(margs, tasks, nfs, genkw, codex,
-                        os.path.join(work_dir, tag, name), batch_size, limit, apply_ct)
+                        os.path.join(work_dir, tag, name), batch_size, limit, apply_ct,
+                        model_type)
         results.update(r)                       # MERGE — never drop prior tasks/waves
         json.dump(results, open(path, "w"), indent=2)   # SAVE after each call (resumable)
         print(f"[{tag}] {name}: saved -> {path}", flush=True)
@@ -175,7 +176,7 @@ def above_chance_set(out_dir: str, langs: list[dict], role: dict) -> set:
     bound > 0.25). Recorded to <model_dir>/abovechance_languages.json. On a weak base this
     may be only the high-resource controls (or empty) -- reported honestly either way."""
     base_path = os.path.join(out_dir, "base.json")
-    details, keep = [], set()
+    low_res, control, keep = [], [], set()
     if os.path.exists(base_path):
         results = json.load(open(base_path, encoding="utf-8"))
         for e in langs:
@@ -187,16 +188,25 @@ def above_chance_set(out_dir: str, langs: list[dict], role: dict) -> set:
             passed = lb > CHANCE
             if passed:
                 keep.add(iso)
-            details.append({"iso": iso, "role": role.get(iso), "base_acc": round(acc, 4),
-                            "base_stderr": (round(se, 4) if se is not None else None),
-                            "lower_bound": round(lb, 4), "above_chance": passed})
-    rec = {"rule": f"base Belebele acc - {ABOVE_CHANCE_Z}*stderr > {CHANCE} (one-sided 95%)",
-           "chance": CHANCE, "z": ABOVE_CHANCE_Z, "n_above_chance": len(keep),
-           "above_chance_isos": sorted(keep),
-           "note": "empty/controls-only is a valid, honest outcome for a small base",
-           "languages": details}
-    with open(os.path.join(os.path.dirname(out_dir), "abovechance_languages.json"), "w") as f:
+            d = {"iso": iso, "base_acc": round(acc, 4),
+                 "base_stderr": (round(se, 4) if se is not None else None),
+                 "lower_bound": round(lb, 4), "above_chance": passed}
+            (low_res if role.get(iso) == "low_resource" else control).append(d)
+    lr_pass = sorted(d["iso"] for d in low_res if d["above_chance"])
+    ctrl_pass = sorted(d["iso"] for d in control if d["above_chance"])
+    slug = os.path.basename(os.path.dirname(out_dir)) or "model"
+    rec = {"model_slug": slug,
+           "rule": f"base Belebele acc - {ABOVE_CHANCE_Z}*stderr > {CHANCE} (one-sided 95%)",
+           "chance": CHANCE, "z": ABOVE_CHANCE_Z,
+           "low_resource": {"n_above_chance": len(lr_pass), "above_chance_isos": lr_pass,
+                            "languages": low_res},
+           "control": {"n_above_chance": len(ctrl_pass), "above_chance_isos": ctrl_pass,
+                       "languages": control}}
+    with open(os.path.join(os.path.dirname(out_dir), f"abovechance_{slug}.json"), "w",
+              encoding="utf-8") as f:
         json.dump(rec, f, indent=2)
+    print(f"\n[GATE {slug}] above-chance LOW-RESOURCE ({len(lr_pass)}): {lr_pass or 'NONE'}")
+    print(f"[GATE {slug}] above-chance CONTROL     ({len(ctrl_pass)}): {ctrl_pass or 'NONE'}")
     return keep
 
 
@@ -274,6 +284,9 @@ def main() -> None:
     ap.add_argument("--out_dir", default="audit/results/stageb/eval")
     ap.add_argument("--work_dir", default="audit/results/stageb/eval_work")
     ap.add_argument("--base_model", default=BASE_MODEL)
+    ap.add_argument("--model_type", default="hf",
+                    help="lm-eval --model backend: 'hf' (CausalLM) or 'hf-multimodal' "
+                         "(vision-text Gemma-3 4B/12B).")
     ap.add_argument("--limit", type=int, default=200, help="Examples per task (0=full).")
     ap.add_argument("--batch_size", type=int, default=None,
                     help="Default 16 (fast) / 8 (slow).")
@@ -297,7 +310,7 @@ def main() -> None:
         for cond, budget, adapter in all_models:
             if tag_of(cond, budget, adapter) in want:
                 eval_one(cond, budget, adapter, args.group, args.out_dir, args.work_dir,
-                         args.base_model, batch, args.limit, apply_ct)
+                         args.base_model, batch, args.limit, apply_ct, args.model_type)
         return
 
     # ---- orchestrator: pick models, round-robin across GPUs, spawn one worker/GPU ----
@@ -319,6 +332,7 @@ def main() -> None:
         cmd = [sys.executable, "-m", "audit.stageb.run_eval", "--group", args.group,
                "--worker_tags", *btags, "--limit", str(args.limit),
                "--batch_size", str(batch), "--base_model", args.base_model,
+               "--model_type", args.model_type,
                "--ckpt_dir", args.ckpt_dir, "--out_dir", args.out_dir,
                "--work_dir", args.work_dir]
         if args.no_chat_template:
