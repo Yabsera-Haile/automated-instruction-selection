@@ -23,6 +23,8 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 # and caused the OOMs). Override by exporting CUDA_VISIBLE_DEVICES before running.
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
+from audit.common import ensure_chat_template  # noqa: E402  (after env setdefaults)
+
 
 def load_cfg(path: str) -> dict:
     import yaml
@@ -30,9 +32,25 @@ def load_cfg(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def fold_system_into_user(messages: list[dict]) -> list[dict]:
+    """Gemma has no system role; fold a leading system turn into the first user turn
+    (Gemma's own convention). No-op when there's no leading system message."""
+    if not messages or messages[0].get("role") != "system":
+        return messages
+    sys_text = (messages[0].get("content") or "").strip()
+    rest = [dict(m) for m in messages[1:]]
+    for m in rest:
+        if m.get("role") == "user":
+            m["content"] = (sys_text + "\n\n" + (m.get("content") or "")).strip()
+            return rest
+    return rest  # no user turn to attach to: drop the system message
+
+
 def encode_for_sft(messages: list[dict], tok, max_len: int) -> dict | None:
     """Tokenize a conversation with the model's chat template; label only assistant
-    turns. Works for single- and multi-turn (Qwen's template is additive per message)."""
+    turns. Works for single- and multi-turn (Qwen and Gemma templates are additive per
+    message). A leading system turn is folded into the first user turn first (Gemma)."""
+    messages = fold_system_into_user(messages)
     input_ids: list[int] = []
     labels: list[int] = []
     for i, msg in enumerate(messages):
@@ -69,6 +87,9 @@ def main() -> None:
     tok = AutoTokenizer.from_pretrained(model_name)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    ensure_chat_template(tok, model_name)  # Gemma -pt base ships no template; supply Gemma's
+    if tok.chat_template is None:
+        raise SystemExit(f"No chat template available for {model_name}; cannot format SFT data.")
 
     raw = [json.loads(l) for l in open(args.train, encoding="utf-8") if l.strip()]
     encoded = [e for e in (encode_for_sft(r["messages"], tok, cfg["max_seq_len"])
