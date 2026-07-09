@@ -1,0 +1,146 @@
+{
+  "model_slug": "gemma-3-4b-pt",
+  "rule": "base Belebele acc - 1.645*stderr > 0.25 (one-sided 95%)",
+  "chance": 0.25,
+  "z": 1.645,
+  "low_resource": {
+    "n_above_chance": 10,
+    "above_chance_isos": [
+      "bod",
+      "ceb",
+      "hau",
+      "kir",
+      "mlt",
+      "plt",
+      "som",
+      "tsn",
+      "wol",
+      "zul"
+    ],
+    "languages": [
+      {
+        "iso": "ceb",
+        "base_acc": 0.4589,
+        "base_stderr": 0.0166,
+        "lower_bound": 0.4315,
+        "above_chance": true
+      },
+      {
+        "iso": "plt",
+        "base_acc": 0.3789,
+        "base_stderr": 0.0162,
+        "lower_bound": 0.3523,
+        "above_chance": true
+      },
+      {
+        "iso": "bod",
+        "base_acc": 0.2767,
+        "base_stderr": 0.0149,
+        "lower_bound": 0.2521,
+        "above_chance": true
+      },
+      {
+        "iso": "yor",
+        "base_acc": 0.2667,
+        "base_stderr": 0.0147,
+        "lower_bound": 0.2424,
+        "above_chance": false
+      },
+      {
+        "iso": "tsn",
+        "base_acc": 0.2878,
+        "base_stderr": 0.0151,
+        "lower_bound": 0.2629,
+        "above_chance": true
+      },
+      {
+        "iso": "som",
+        "base_acc": 0.3289,
+        "base_stderr": 0.0157,
+        "lower_bound": 0.3031,
+        "above_chance": true
+      },
+      {
+        "iso": "kir",
+        "base_acc": 0.4278,
+        "base_stderr": 0.0165,
+        "lower_bound": 0.4006,
+        "above_chance": true
+      },
+      {
+        "iso": "fuv",
+        "base_acc": 0.25,
+        "base_stderr": 0.0144,
+        "lower_bound": 0.2262,
+        "above_chance": false
+      },
+      {
+        "iso": "hau",
+        "base_acc": 0.3556,
+        "base_stderr": 0.016,
+        "lower_bound": 0.3293,
+        "above_chance": true
+      },
+      {
+        "iso": "wol",
+        "base_acc": 0.2778,
+        "base_stderr": 0.0149,
+        "lower_bound": 0.2532,
+        "above_chance": true
+      },
+      {
+        "iso": "mlt",
+        "base_acc": 0.4722,
+        "base_stderr": 0.0167,
+        "lower_bound": 0.4448,
+        "above_chance": true
+      },
+      {
+        "iso": "zul",
+        "base_acc": 0.3222,
+        "base_stderr": 0.0156,
+        "lower_bound": 0.2966,
+        "above_chance": true
+      }
+    ]
+  },
+  "control": {
+    "n_above_chance": 4,
+    "above_chance_isos": [
+      "arb",
+      "cmn",
+      "eng",
+      "spa"
+    ],
+    "languages": [
+      {
+        "iso": "eng",
+        "base_acc": 0.6933,
+        "base_stderr": 0.0154,
+        "lower_bound": 0.668,
+        "above_chance": true
+      },
+      {
+        "iso": "spa",
+        "base_acc": 0.6044,
+        "base_stderr": 0.0163,
+        "lower_bound": 0.5776,
+        "above_chance": true
+      },
+      {
+        "iso": "cmn",
+        "base_acc": 0.6567,
+        "base_stderr": 0.0158,
+        "lower_bound": 0.6306,
+        "above_chance": true
+      },
+      {
+        "iso": "arb",
+        "base_acc": 0.5744,
+        "base_stderr": 0.0165,
+        "lower_bound": 0.5473,
+        "above_chance": true
+      }
+    ]
+  }
+}
