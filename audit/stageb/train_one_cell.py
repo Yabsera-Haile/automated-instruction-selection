@@ -25,6 +25,12 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 from audit.common import ensure_chat_template  # noqa: E402  (after env setdefaults)
 
+# For vision-text bases (Gemma-3 4B/12B), LoRA must hit ONLY the language tower -- a plain
+# q_proj/... suffix list would also adapt the SigLIP vision attention. This regex was
+# verified by audit.stageb.inspect_gemma_modules: 238 language / 0 vision on gemma-3-4b-pt.
+GEMMA_LANG_TOWER_REGEX = (
+    r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)")
+
 
 def load_cfg(path: str) -> dict:
     import yaml
@@ -110,8 +116,19 @@ def main() -> None:
     # engaging. Load to CPU and let the Trainer place it on the (single visible) GPU.
     # 4-bit still needs device_map.
     device_map = {"": 0} if cfg.get("load_4bit") else None
-    model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, **load_kwargs)
+    # Gemma-3 4B/12B are packaged as vision-text (Gemma3ForConditionalGeneration) and won't
+    # load via AutoModelForCausalLM; fall back to the image-text loader. Text bases (Qwen,
+    # Gemma-1B-text) take the CausalLM path unchanged.
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, **load_kwargs)
+        multimodal = False
+    except (ValueError, KeyError, OSError):
+        from transformers import AutoModelForImageTextToText
+        model = AutoModelForImageTextToText.from_pretrained(model_name, device_map=device_map, **load_kwargs)
+        multimodal = True
     model.config.use_cache = False
+    if hasattr(model.config, "text_config"):   # multimodal config nests the text settings
+        model.config.text_config.use_cache = False
     if cfg.get("load_4bit"):
         from peft import prepare_model_for_kbit_training
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=gc)
@@ -120,12 +137,23 @@ def main() -> None:
         # TrainingArguments alone did not free activations (the OOM was seq-independent).
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
+    # Vision-text base -> restrict LoRA to the language tower (regex). Text base -> config list.
+    target = GEMMA_LANG_TOWER_REGEX if multimodal else cfg["target_modules"]
     lora = LoraConfig(
         r=cfg["lora_rank"], lora_alpha=cfg["lora_alpha"], lora_dropout=cfg["lora_dropout"],
-        target_modules=cfg["target_modules"], bias="none", task_type=TaskType.CAUSAL_LM)
+        target_modules=target, bias="none", task_type=TaskType.CAUSAL_LM)
     model = get_peft_model(model, lora)
     if gc:
         model.enable_input_require_grads()  # required for grad-checkpointing + PEFT
+
+    # Confirm (a): LoRA hit the language tower only; abort if any vision-tower module adapted.
+    adapted = [n for n, m in model.named_modules() if hasattr(m, "lora_A")]
+    n_vision = sum(1 for n in adapted if "vision" in n.lower())
+    print(f"[{os.path.basename(args.output_dir)}] LoRA modules: {len(adapted)} "
+          f"(language={len(adapted) - n_vision}, vision={n_vision}) | multimodal={multimodal} "
+          f"| grad_checkpointing={gc}")   # (b) grad checkpointing state
+    if n_vision:
+        raise SystemExit(f"LoRA attached to {n_vision} vision-tower modules -- aborting.")
     model.print_trainable_parameters()
 
     targs = TrainingArguments(
