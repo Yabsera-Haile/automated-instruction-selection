@@ -25,11 +25,13 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 from audit.common import ensure_chat_template  # noqa: E402  (after env setdefaults)
 
-# For vision-text bases (Gemma-3 4B/12B), LoRA must hit ONLY the language tower -- a plain
-# q_proj/... suffix list would also adapt the SigLIP vision attention. This regex was
-# verified by audit.stageb.inspect_gemma_modules: 238 language / 0 vision on gemma-3-4b-pt.
+# For vision-text bases (Gemma-3 4B/12B), LoRA must skip the SigLIP vision tower (whose
+# attention also has q/k/v_proj). On recent transformers, AutoModelForCausalLM loads the
+# FULL vision-text model, so we detect the tower from the loaded modules and use this regex
+# (PEFT applies re.fullmatch): every configured projection EXCEPT those under a *vision*
+# module. Verified 238 language / 0 vision on gemma-3-4b-pt (audit.stageb.inspect_gemma_modules).
 GEMMA_LANG_TOWER_REGEX = (
-    r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)")
+    r"(?!.*vision).*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)")
 
 
 def load_cfg(path: str) -> dict:
@@ -121,11 +123,9 @@ def main() -> None:
     # Gemma-1B-text) take the CausalLM path unchanged.
     try:
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, **load_kwargs)
-        multimodal = False
     except (ValueError, KeyError, OSError):
         from transformers import AutoModelForImageTextToText
         model = AutoModelForImageTextToText.from_pretrained(model_name, device_map=device_map, **load_kwargs)
-        multimodal = True
     model.config.use_cache = False
     if hasattr(model.config, "text_config"):   # multimodal config nests the text settings
         model.config.text_config.use_cache = False
@@ -137,8 +137,12 @@ def main() -> None:
         # TrainingArguments alone did not free activations (the OOM was seq-independent).
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
-    # Vision-text base -> restrict LoRA to the language tower (regex). Text base -> config list.
-    target = GEMMA_LANG_TOWER_REGEX if multimodal else cfg["target_modules"]
+    # Detect a vision tower from the LOADED modules -- recent transformers load the full
+    # vision-text Gemma-3 even via AutoModelForCausalLM, so the loader alone can't tell us.
+    # When present, restrict LoRA to everything EXCEPT the vision tower; a plain text base
+    # uses the config suffix list.
+    has_vision = any("vision" in n.lower() for n, _ in model.named_modules())
+    target = GEMMA_LANG_TOWER_REGEX if has_vision else cfg["target_modules"]
     lora = LoraConfig(
         r=cfg["lora_rank"], lora_alpha=cfg["lora_alpha"], lora_dropout=cfg["lora_dropout"],
         target_modules=target, bias="none", task_type=TaskType.CAUSAL_LM)
@@ -150,7 +154,7 @@ def main() -> None:
     adapted = [n for n, m in model.named_modules() if hasattr(m, "lora_A")]
     n_vision = sum(1 for n in adapted if "vision" in n.lower())
     print(f"[{os.path.basename(args.output_dir)}] LoRA modules: {len(adapted)} "
-          f"(language={len(adapted) - n_vision}, vision={n_vision}) | multimodal={multimodal} "
+          f"(language={len(adapted) - n_vision}, vision={n_vision}) | vision_tower={has_vision} "
           f"| grad_checkpointing={gc}")   # (b) grad checkpointing state
     if n_vision:
         raise SystemExit(f"LoRA attached to {n_vision} vision-tower modules -- aborting.")
