@@ -1,0 +1,162 @@
+{
+  "target_model": "google/gemma-3-4b-pt",
+  "slug": "gemma-3-4b-pt",
+  "cells": [
+    {
+      "condition": "random__b0.1",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 1060,
+      "steps": 51,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 2139.0,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "perplexity-low__b0.1",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 1080,
+      "steps": 51,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 2469.3,
+      "peak_vram_mib": 13525,
+      "load_4bit": false
+    },
+    {
+      "condition": "quality__b0.1",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 1077,
+      "steps": 51,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 2085.0,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "perplexity-high__b0.1",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 1048,
+      "steps": 51,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 1827.1,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "random__b0.05",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 532,
+      "steps": 27,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 1085.8,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "perplexity-low__b0.05",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 541,
+      "steps": 27,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 1235.0,
+      "peak_vram_mib": 13525,
+      "load_4bit": false
+    },
+    {
+      "condition": "quality__b0.05",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 538,
+      "steps": 27,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 1036.7,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "perplexity-high__b0.05",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 517,
+      "steps": 27,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 912.9,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "random__b0.01",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 108,
+      "steps": 6,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 229.0,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "perplexity-low__b0.01",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 108,
+      "steps": 6,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 255.1,
+      "peak_vram_mib": 13525,
+      "load_4bit": false
+    },
+    {
+      "condition": "quality__b0.01",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 107,
+      "steps": 6,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 200.7,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    },
+    {
+      "condition": "perplexity-high__b0.01",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 86,
+      "steps": 6,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 144.2,
+      "peak_vram_mib": 11931,
+      "load_4bit": false
+    },
+    {
+      "condition": "full__b1.0",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 10562,
+      "steps": 498,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 21234.1,
+      "peak_vram_mib": 13524,
+      "load_4bit": false
+    }
+  ]
+}
