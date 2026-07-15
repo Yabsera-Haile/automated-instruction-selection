@@ -41,6 +41,7 @@ ISO_TO_FLORES = {
     "fuv": "fuv_Latn", "hau": "hau_Latn", "wol": "wol_Latn", "mlt": "mlt_Latn",
     "zul": "zul_Latn", "spa": "spa_Latn", "cmn": "zho_Hans", "arb": "arb_Arab",
 }
+FLORES_TO_ISO = {v: k for k, v in ISO_TO_FLORES.items()}
 SKILL_OF = {"gsm8k": "math", "mmlu": "general", "mbpp": "code",
             "ifeval": "instruction_following"}
 METRIC_CANDIDATES = {
@@ -57,17 +58,24 @@ CHANCE = 0.25            # Belebele is 4-way multiple choice
 ABOVE_CHANCE_Z = 1.645   # one-sided 95%: base acc - z*stderr > CHANCE => "above chance"
 
 
-def group_calls(group: str, belebele_tasks: list[str]):
-    """Return list of (name, tasks, num_fewshot, gen_kwargs, code_exec)."""
+def group_calls(group: str, belebele_tasks: list[str], full_langs: set, default_limit: int):
+    """Return list of (name, tasks, num_fewshot, gen_kwargs, code_exec, limit). `full_langs`
+    (ISO codes) are Belebele languages evaluated at FULL items (limit 0); everything else
+    uses `default_limit`."""
     if group == "fast":
-        return [
-            ("belebele", belebele_tasks, None, None, False),   # loglik, task-default shots
-            ("mmlu", ["mmlu"], 5, None, False),                # loglik, 5-shot
-        ]
+        full = [t for t in belebele_tasks if FLORES_TO_ISO.get(t[len("belebele_"):]) in full_langs]
+        rest = [t for t in belebele_tasks if t not in full]
+        calls = []
+        if full:  # decisive languages: spend the items (full Belebele)
+            calls.append(("belebele_full", full, None, None, False, 0))
+        if rest:
+            calls.append(("belebele", rest, None, None, False, default_limit))
+        calls.append(("mmlu", ["mmlu"], 5, None, False, default_limit))   # loglik, 5-shot
+        return calls
     return [  # slow / generation
-        ("ifeval", ["ifeval"], None, "max_gen_toks=512", False),
-        ("mbpp", ["mbpp"], None, "max_gen_toks=256", True),
-        ("gsm8k", ["gsm8k"], 8, "max_gen_toks=512", False),
+        ("ifeval", ["ifeval"], None, "max_gen_toks=512", False, default_limit),
+        ("mbpp", ["mbpp"], None, "max_gen_toks=256", True, default_limit),
+        ("gsm8k", ["gsm8k"], 8, "max_gen_toks=512", False, default_limit),
     ]
 
 
@@ -136,11 +144,13 @@ def tag_of(cond, budget, adapter):
 
 
 def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
-             batch_size, limit, apply_ct, model_type="hf", extra_args=""):
+             batch_size, limit, apply_ct, model_type="hf", extra_args="", full_langs=()):
     tag = tag_of(cond, budget, adapter)
     margs = f"pretrained={base_model},dtype=bfloat16"
     if adapter is not None:
-        margs += f",peft={adapter}"
+        # Load the tokenizer FROM the adapter dir: it carries the chat template the model was
+        # trained with (the Gemma -pt base tokenizer has none), so --apply_chat_template works.
+        margs += f",peft={adapter},tokenizer={adapter}"
     if extra_args:
         margs += f",{extra_args}"
     langs = json.load(open("audit/configs/eval_languages.json", encoding="utf-8"))["languages"]
@@ -149,12 +159,13 @@ def eval_one(cond, budget, adapter, group, out_dir, work_dir, base_model,
     path = os.path.join(out_dir, f"{tag}.json")
     os.makedirs(out_dir, exist_ok=True)
     results = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
-    for name, tasks, nfs, genkw, codex in group_calls(group, belebele_tasks):
+    for name, tasks, nfs, genkw, codex, call_limit in group_calls(
+            group, belebele_tasks, set(full_langs), limit):
         if have_all(results, tasks):
             print(f"[{tag}] {name}: already present, skipping", flush=True)
             continue
         r = run_lm_eval(margs, tasks, nfs, genkw, codex,
-                        os.path.join(work_dir, tag, name), batch_size, limit, apply_ct,
+                        os.path.join(work_dir, tag, name), batch_size, call_limit, apply_ct,
                         model_type)
         results.update(r)                       # MERGE — never drop prior tasks/waves
         json.dump(results, open(path, "w"), indent=2)   # SAVE after each call (resumable)
@@ -225,16 +236,19 @@ def assemble_parquet(out_dir: str, eval_langs: str):
             cond, budget = "base", 0.0
         budget = float(budget)
         results = json.load(open(path, encoding="utf-8"))
-        lowres, controls, abovechance = [], [], []
+        lowres, controls, abovechance, lowres_ac = [], [], [], []
         for e in langs:
             iso = e["iso"]
             score = pick_metric(results, f"belebele_{ISO_TO_FLORES.get(iso, '')}", "belebele")
             if score is None:
                 continue
             rows.append([cond, budget, "belebele", "language", iso, score])
-            (lowres if role.get(iso) == "low_resource" else controls).append(score)
+            r = role.get(iso)
+            (lowres if r == "low_resource" else controls).append(score)
             if iso in keep:
                 abovechance.append(score)
+                if r == "low_resource":
+                    lowres_ac.append(score)
         skill_scores = []
         for task, skill in SKILL_OF.items():
             if task == "gsm8k":  # record both, macro uses the conservative strict-match
@@ -262,17 +276,26 @@ def assemble_parquet(out_dir: str, eval_langs: str):
         if controls:
             rows.append([cond, budget, "belebele", "average", "control_macro",
                          sum(controls) / len(controls)])
-        if abovechance:  # view (b): macro over base-above-chance languages only
+        if abovechance:  # macro over ALL base-above-chance languages (low-res + control)
             rows.append([cond, budget, "belebele", "average", "abovechance_macro",
                          sum(abovechance) / len(abovechance)])
+        if lowres_ac:    # DECISIVE metric: above-chance LOW-RESOURCE languages only
+            rows.append([cond, budget, "belebele", "average", "lowres_abovechance_macro",
+                         sum(lowres_ac) / len(lowres_ac)])
     df = pd.DataFrame(rows, columns=["condition", "budget", "task", "group_type",
                                      "group", "score"])
     out = os.path.join(os.path.dirname(out_dir), "stageb_results.parquet")
     df.to_parquet(out, index=False)
-    print(f"\nAbove-chance languages (base one-sided 95% lb > {CHANCE}): "
-          f"{sorted(keep) or 'NONE (base at chance on all eval languages)'}")
+    ac_low = sorted(iso for iso in keep if role.get(iso) == "low_resource")
+    print(f"\nAbove-chance LOW-RESOURCE languages (decisive set): {ac_low or 'NONE'}")
     print(f"Assembled {len(df)} rows from {len(glob.glob(os.path.join(out_dir,'*.json')))} "
           f"models -> {out}")
+    if ac_low:
+        sub = df[(df.group_type == "language") & (df.group.isin(ac_low))]
+        piv = sub.pivot_table(index=["condition", "budget"], columns="group", values="score")
+        print("\n=== DECISIVE: per-language Belebele on base-above-chance LOW-RESOURCE langs ===")
+        print(piv.round(3).to_string())
+    print("\n=== Macros (lowres_abovechance_macro = decisive) ===")
     print(df[df.group_type == "average"].to_string(index=False))
 
 
@@ -294,6 +317,9 @@ def main() -> None:
                          "'add_bos_token=True,attn_implementation=eager' for Gemma (Gemma is "
                          "at chance without BOS), '' otherwise. Pass '' to disable.")
     ap.add_argument("--limit", type=int, default=200, help="Examples per task (0=full).")
+    ap.add_argument("--full_langs", nargs="*", default=[],
+                    help="ISO codes evaluated on FULL Belebele (no limit); others use --limit. "
+                         "Round 3: the gate's above-chance low-resource languages.")
     ap.add_argument("--batch_size", type=int, default=None,
                     help="Default 16 (fast) / 8 (slow).")
     ap.add_argument("--gpus", default="0,1,2", help="GPUs to distribute models across.")
@@ -320,7 +346,8 @@ def main() -> None:
         for cond, budget, adapter in all_models:
             if tag_of(cond, budget, adapter) in want:
                 eval_one(cond, budget, adapter, args.group, args.out_dir, args.work_dir,
-                         args.base_model, batch, args.limit, apply_ct, args.model_type, extra)
+                         args.base_model, batch, args.limit, apply_ct, args.model_type, extra,
+                         args.full_langs)
         return
 
     # ---- orchestrator: pick models, round-robin across GPUs, spawn one worker/GPU ----
@@ -345,6 +372,8 @@ def main() -> None:
                "--model_type", args.model_type, "--model_args_extra", extra,
                "--ckpt_dir", args.ckpt_dir, "--out_dir", args.out_dir,
                "--work_dir", args.work_dir]
+        if args.full_langs:
+            cmd += ["--full_langs", *args.full_langs]
         if args.no_chat_template:
             cmd.append("--no_chat_template")
         logf = open(os.path.join(args.work_dir, f"worker_gpu{g}.log"), "w")
