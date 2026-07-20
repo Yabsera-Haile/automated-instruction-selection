@@ -1,0 +1,37 @@
+{
+  "pilot_language": "plt",
+  "muri_config": "mlg",
+  "base_size": 10755,
+  "removed_plt": 87,
+  "doses": [
+    0,
+    250,
+    1000,
+    4000
+  ],
+  "dose_file": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\plt_pilot_dose.jsonl",
+  "n_dose": 4000,
+  "pools": {
+    "d0": {
+      "plt": 0,
+      "total": 10755,
+      "path": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\plt_pilot_d0.jsonl"
+    },
+    "d250": {
+      "plt": 250,
+      "total": 11005,
+      "path": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\plt_pilot_d250.jsonl"
+    },
+    "d1000": {
+      "plt": 1000,
+      "total": 11755,
+      "path": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\plt_pilot_d1000.jsonl"
+    },
+    "d4000": {
+      "plt": 4000,
+      "total": 14755,
+      "path": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\plt_pilot_d4000.jsonl"
+    }
+  },
+  "acceptance": "PASS"
+}
