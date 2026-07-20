@@ -48,6 +48,8 @@ def yaml_for(src_iso: str, tgt_iso: str) -> str:
         f"task: {task_name(src_iso, tgt_iso)}\n"
         f"dataset_path: Muennighoff/flores200\n"
         f"dataset_name: all\n"
+        f"dataset_kwargs:\n"
+        f"  trust_remote_code: true    # Muennighoff/flores200 uses a loader script\n"
         f"test_split: devtest\n"
         f"output_type: generate_until\n"
         f'doc_to_text: "{doc_to_text}"\n'

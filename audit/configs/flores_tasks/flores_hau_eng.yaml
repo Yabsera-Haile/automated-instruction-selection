@@ -1,6 +1,8 @@
 task: flores_hau_eng
 dataset_path: Muennighoff/flores200
 dataset_name: all
+dataset_kwargs:
+  trust_remote_code: true    # Muennighoff/flores200 uses a loader script
 test_split: devtest
 output_type: generate_until
 doc_to_text: "Translate the following sentence from Hausa to English.\nHausa: {{sentence_hau_Latn}}\nEnglish:"
