@@ -1,0 +1,65 @@
+{
+  "target_model": "google/gemma-3-4b-pt",
+  "cells": [
+    {
+      "condition": "plt_250",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 10762,
+      "steps": 507,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 21292.6,
+      "peak_vram_mib": 13524,
+      "load_4bit": false,
+      "dose": 250,
+      "lora_language": 238,
+      "lora_vision": 0
+    },
+    {
+      "condition": "plt_1000",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 11512,
+      "steps": 540,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 23608.8,
+      "peak_vram_mib": 13524,
+      "load_4bit": false,
+      "dose": 1000,
+      "lora_language": 238,
+      "lora_vision": 0
+    },
+    {
+      "condition": "plt_4000",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 14512,
+      "steps": 681,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 28957.7,
+      "peak_vram_mib": 13524,
+      "load_4bit": false,
+      "dose": 4000,
+      "lora_language": 238,
+      "lora_vision": 0
+    },
+    {
+      "condition": "plt_0",
+      "model": "google/gemma-3-4b-pt",
+      "device": "cuda",
+      "n_examples": 10512,
+      "steps": 495,
+      "epochs": 3,
+      "effective_batch": 64,
+      "runtime_s": 20962.4,
+      "peak_vram_mib": 13524,
+      "load_4bit": false,
+      "dose": 0,
+      "lora_language": 238,
+      "lora_vision": 0
+    }
+  ]
+}
