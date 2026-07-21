@@ -84,7 +84,7 @@ def score_sentences(model, tok, sentences, prompt="", max_len=1024, device=None)
 
 
 def load_flores(flores_code: str, split="devtest", limit=None,
-                dataset="facebook/flores"):
+                dataset="Muennighoff/flores200"):
     from datasets import load_dataset
     ds = load_dataset(dataset, flores_code, split=split, trust_remote_code=True)
     field = "sentence" if "sentence" in ds.column_names else ds.column_names[-1]
@@ -172,7 +172,8 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="Sentences/language (None = all ~1012).")
     ap.add_argument("--prompt", default="", help="Fixed neutral user prompt (held constant).")
     ap.add_argument("--max_len", type=int, default=1024)
-    ap.add_argument("--flores_dataset", default="facebook/flores")
+    ap.add_argument("--flores_dataset", default="Muennighoff/flores200",
+                    help="Non-gated FLORES-200 mirror; per-language configs (e.g. plt_Latn).")
     ap.add_argument("--out_dir", default="audit/results/stageb/gemma-3-4b-pt/round4/metrics/heldout_ppl")
     args = ap.parse_args()
 
