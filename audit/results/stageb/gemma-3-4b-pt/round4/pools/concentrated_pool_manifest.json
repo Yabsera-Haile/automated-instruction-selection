@@ -1,0 +1,56 @@
+{
+  "round": 4,
+  "N": 2000,
+  "decisive_languages": [
+    "ceb",
+    "hau",
+    "kir",
+    "mlt",
+    "plt",
+    "som",
+    "zul"
+  ],
+  "base_size": 10477,
+  "removed_from_base": 365,
+  "injected": 14000,
+  "pool_size": 24477,
+  "per_language_counts": {
+    "ceb": 2000,
+    "hau": 2000,
+    "kir": 2000,
+    "mlt": 2000,
+    "plt": 2000,
+    "som": 2000,
+    "zul": 2000
+  },
+  "id_checksums": {
+    "ceb": "7c0ac80c339b8a7a",
+    "hau": "92ce99558ed14ecf",
+    "kir": "9cd2b24efa8fdf4a",
+    "mlt": "f2e66be20f39db01",
+    "plt": "63eda6b0f00ecd01",
+    "som": "bd50bc48c9062a60",
+    "zul": "ab58eed7dc771f26"
+  },
+  "resource_bucket_composition": {
+    "5": 8442,
+    "4": 474,
+    "3": 426,
+    "2": 12285,
+    "0": 500,
+    "1": 2350
+  },
+  "skill_composition": {
+    "math": 3487,
+    "general": 972,
+    "chat": 1221,
+    "safety": 1190,
+    "multilingual": 15648,
+    "instruction_following": 296,
+    "code": 1495,
+    "science": 112,
+    "other": 56
+  },
+  "pool_path": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\concentrated_pool.jsonl",
+  "acceptance": "PASS"
+}
