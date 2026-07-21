@@ -1,0 +1,15 @@
+{
+  "condition": "base",
+  "base_model": "google/gemma-3-4b-pt",
+  "adapter": null,
+  "prompt": "",
+  "split": "devtest",
+  "languages": {
+    "plt": {
+      "nll": 3.546402943989991,
+      "ppl": 34.68831698638677,
+      "n_tokens": 55907,
+      "n_sentences": 1012
+    }
+  }
+}

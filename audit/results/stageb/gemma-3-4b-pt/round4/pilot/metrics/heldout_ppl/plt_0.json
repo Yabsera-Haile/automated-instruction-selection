@@ -1,0 +1,15 @@
+{
+  "condition": "plt_0",
+  "base_model": "google/gemma-3-4b-pt",
+  "adapter": "audit/results/stageb/gemma-3-4b-pt/round4/pilot/checkpoints/plt_0",
+  "prompt": "",
+  "split": "devtest",
+  "languages": {
+    "plt": {
+      "nll": 3.5549952088597783,
+      "ppl": 34.98765233654363,
+      "n_tokens": 55907,
+      "n_sentences": 1012
+    }
+  }
+}
