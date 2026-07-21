@@ -112,8 +112,10 @@ def main() -> None:
                 results.append({"cell": r["cell"], "dose": r["dose"], "error": text[-400:]})
             else:
                 lang_n, vis_n = towers if towers else (-1, -1)
-                results.append({**metrics, "dose": r["dose"], "lora_language": lang_n,
-                                "lora_vision": vis_n})
+                # NOTE: train_one_cell's metrics use key "condition"; carry "cell" explicitly
+                # so the summary table below can key on it uniformly with the error branch.
+                results.append({**metrics, "cell": r["cell"], "dose": r["dose"],
+                                "lora_language": lang_n, "lora_vision": vis_n})
                 logger.info("done   %-10s %d ex, %d steps, %.0fs, %d MiB | LoRA lang=%d vision=%d",
                             r["cell"], metrics["n_examples"], metrics["steps"],
                             metrics["runtime_s"], metrics["peak_vram_mib"], lang_n, vis_n)
