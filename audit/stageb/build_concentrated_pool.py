@@ -158,6 +158,7 @@ def main() -> None:
     mpath = os.path.join(args.out_dir, "concentrated_pool_manifest.json")
     json.dump(manifest, open(mpath, "w", encoding="utf-8"), indent=2)
     print(f"\nmanifest -> {mpath}")
+    emit_metadata(out_path, args.out_dir)   # pool + metadata from one command
 
     if args.verify_against:
         ref = json.load(open(args.verify_against, encoding="utf-8"))
