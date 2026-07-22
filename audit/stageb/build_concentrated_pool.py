@@ -62,6 +62,29 @@ def collect(iso, config, n, max_scan, base_ids, lid, muri_dataset, bucket):
     return rows
 
 
+def assert_positional_index(pool_path: str) -> None:
+    """Fail loudly if pool_row_idx != row position (the Stage-A scorers depend on it)."""
+    bad = 0
+    for pos, line in enumerate(open(pool_path, encoding="utf-8")):
+        if json.loads(line).get("pool_row_idx") != pos:
+            bad += 1
+    if bad:
+        raise SystemExit(f"INVARIANT VIOLATED: pool_row_idx != position for {bad} rows in "
+                         f"{pool_path}. Stage-A selections would be silently mis-mapped.")
+    print(f"invariant OK: pool_row_idx == row position for every row in {pool_path}")
+
+
+def reindex_pool(pool_path: str) -> None:
+    """Renumber an existing pool positionally (no MURI re-streaming)."""
+    rows = read_jsonl(pool_path)
+    for i, r in enumerate(rows):
+        r["pool_row_idx"] = i
+    with open(pool_path, "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print(f"reindexed {len(rows)} rows positionally -> {pool_path}")
+
+
 def emit_metadata(pool_path: str, out_dir: str) -> str:
     """Metadata parquet for run_audit, taken straight from the pool rows (which already carry
     GlotLID language, Joshi bucket and skill), so it is exactly consistent with the pool."""
@@ -87,13 +110,19 @@ def main() -> None:
     ap.add_argument("--max_scan", type=int, default=60000)
     ap.add_argument("--out_dir", default="audit/results/stageb/gemma-3-4b-pt/round4/pools")
     ap.add_argument("--verify_against", default=None, help="Manifest to compare checksums to.")
+    ap.add_argument("--reindex", action="store_true",
+                    help="With --metadata_only: renumber an existing pool positionally first.")
     ap.add_argument("--metadata_only", action="store_true",
                     help="Emit the metadata parquet from an existing concentrated pool "
                          "(no MURI re-streaming).")
     args = ap.parse_args()
 
     if args.metadata_only:
-        emit_metadata(os.path.join(args.out_dir, "concentrated_pool.jsonl"), args.out_dir)
+        pool_path = os.path.join(args.out_dir, "concentrated_pool.jsonl")
+        if args.reindex:
+            reindex_pool(pool_path)
+        assert_positional_index(pool_path)
+        emit_metadata(pool_path, args.out_dir)
         return
 
     cfg = json.load(open(args.config, encoding="utf-8"))
@@ -122,9 +151,15 @@ def main() -> None:
         checksums[iso] = hashlib.sha256(
             "\n".join(r["id"] for r in rows).encode("utf-8")).hexdigest()[:16]
 
-    for i, r in enumerate(injected):          # unique pool_row_idx for the injected block
-        r["pool_row_idx"] = 10_000_000 + i
     concentrated = base + injected
+    # CRITICAL INVARIANT: pool_row_idx MUST equal the row's position in the pool file.
+    # The Stage-A scorers key their scores by ROW POSITION and map back through the
+    # metadata's pool_row_idx (`idx2id[int(idx)]`). If the two disagree, selections are
+    # silently mis-mapped AND every row whose position isn't a pool_row_idx key is dropped.
+    # Preserving the base rows' original indices (or offsetting the injected block) breaks
+    # this -- so renumber the whole pool positionally here.
+    for i, r in enumerate(concentrated):
+        r["pool_row_idx"] = i
     os.makedirs(args.out_dir, exist_ok=True)
     out_path = os.path.join(args.out_dir, "concentrated_pool.jsonl")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -158,7 +193,8 @@ def main() -> None:
     mpath = os.path.join(args.out_dir, "concentrated_pool_manifest.json")
     json.dump(manifest, open(mpath, "w", encoding="utf-8"), indent=2)
     print(f"\nmanifest -> {mpath}")
-    emit_metadata(out_path, args.out_dir)   # pool + metadata from one command
+    assert_positional_index(out_path)      # guard the scorers' position<->index invariant
+    emit_metadata(out_path, args.out_dir)  # pool + metadata from one command
 
     if args.verify_against:
         ref = json.load(open(args.verify_against, encoding="utf-8"))
