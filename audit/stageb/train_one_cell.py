@@ -82,6 +82,9 @@ def main() -> None:
     ap.add_argument("--output_dir", required=True)
     ap.add_argument("--config", default="audit/configs/stageb_train.yaml")
     ap.add_argument("--model", default=None, help="Override model.")
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Training seed (init/data order). Vary it to measure run variance "
+                         "on an identical subset.")
     args = ap.parse_args()
     cfg = load_cfg(args.config)
     model_name = args.model or cfg["model"]
@@ -175,6 +178,7 @@ def main() -> None:
         # must NOT toggle it again.
         gradient_checkpointing=False,
         optim=cfg.get("optim", "adamw_torch"),
+        seed=args.seed, data_seed=args.seed,
         logging_steps=5, save_strategy="no", report_to=[],
     )
     collator = DataCollatorForSeq2Seq(tok, padding=True, label_pad_token_id=-100)
@@ -195,7 +199,7 @@ def main() -> None:
         "model": model_name, "device": "cuda",
         "n_examples": len(ds), "steps": trainer.state.global_step,
         "epochs": cfg["num_train_epochs"], "effective_batch": cfg["per_device_train_batch_size"] * cfg["gradient_accumulation_steps"],
-        "runtime_s": runtime, "peak_vram_mib": peak_vram,
+        "runtime_s": runtime, "peak_vram_mib": peak_vram, "seed": args.seed,
         "load_4bit": bool(cfg.get("load_4bit")),
     }
     print("STAGEB_METRICS " + json.dumps(metrics))
