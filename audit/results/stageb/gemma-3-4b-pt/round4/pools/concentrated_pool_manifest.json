@@ -51,6 +51,6 @@
     "science": 112,
     "other": 56
   },
-  "pool_path": "audit/results/stageb/gemma-3-4b-pt/round4/pools\\concentrated_pool.jsonl",
+  "pool_path": "audit/results/stageb/gemma-3-4b-pt/round4/pools/concentrated_pool.jsonl",
   "acceptance": "PASS"
 }
