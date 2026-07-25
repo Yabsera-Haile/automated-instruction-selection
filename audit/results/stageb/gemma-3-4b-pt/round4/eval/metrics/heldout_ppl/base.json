@@ -1,0 +1,51 @@
+{
+  "condition": "base",
+  "base_model": "google/gemma-3-4b-pt",
+  "adapter": null,
+  "prompt": "",
+  "split": "devtest",
+  "languages": {
+    "ceb": {
+      "nll": 3.4824732930739604,
+      "ppl": 32.54010384451675,
+      "n_tokens": 47981,
+      "n_sentences": 1012
+    },
+    "hau": {
+      "nll": 4.182470316814597,
+      "ppl": 65.52752719105949,
+      "n_tokens": 46889,
+      "n_sentences": 1012
+    },
+    "kir": {
+      "nll": 3.0022054530187265,
+      "ppl": 20.12988351541527,
+      "n_tokens": 52647,
+      "n_sentences": 1012
+    },
+    "mlt": {
+      "nll": 3.125506677649163,
+      "ppl": 22.77142994564702,
+      "n_tokens": 58723,
+      "n_sentences": 1012
+    },
+    "plt": {
+      "nll": 3.546402943989991,
+      "ppl": 34.68831698638677,
+      "n_tokens": 55907,
+      "n_sentences": 1012
+    },
+    "som": {
+      "nll": 4.048972307504482,
+      "ppl": 57.33850040941393,
+      "n_tokens": 52374,
+      "n_sentences": 1012
+    },
+    "zul": {
+      "nll": 3.7414643812396813,
+      "ppl": 42.15968283179021,
+      "n_tokens": 53556,
+      "n_sentences": 1012
+    }
+  }
+}

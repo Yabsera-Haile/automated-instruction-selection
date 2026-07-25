@@ -1,0 +1,51 @@
+{
+  "condition": "perplexity-high__b0.1__s0",
+  "base_model": "google/gemma-3-4b-pt",
+  "adapter": "audit/results/stageb/gemma-3-4b-pt/round4/checkpoints/perplexity-high__b0.1__s0",
+  "prompt": "",
+  "split": "devtest",
+  "languages": {
+    "ceb": {
+      "nll": 3.342277821578021,
+      "ppl": 28.283478103809244,
+      "n_tokens": 47981,
+      "n_sentences": 1012
+    },
+    "hau": {
+      "nll": 3.6350415045994025,
+      "ppl": 37.90342603100917,
+      "n_tokens": 46889,
+      "n_sentences": 1012
+    },
+    "kir": {
+      "nll": 2.8721432249020777,
+      "ppl": 17.67485883244987,
+      "n_tokens": 52647,
+      "n_sentences": 1012
+    },
+    "mlt": {
+      "nll": 2.7171913000031163,
+      "ppl": 15.137745095122298,
+      "n_tokens": 58723,
+      "n_sentences": 1012
+    },
+    "plt": {
+      "nll": 3.277945370206482,
+      "ppl": 26.52122538196061,
+      "n_tokens": 55907,
+      "n_sentences": 1012
+    },
+    "som": {
+      "nll": 3.799965317326595,
+      "ppl": 44.69963416360317,
+      "n_tokens": 52374,
+      "n_sentences": 1012
+    },
+    "zul": {
+      "nll": 3.5283757915720484,
+      "ppl": 34.068588165018326,
+      "n_tokens": 53556,
+      "n_sentences": 1012
+    }
+  }
+}
