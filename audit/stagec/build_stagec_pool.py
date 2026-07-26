@@ -148,6 +148,20 @@ def finalize(base, injected, out_dir, tag):
     return pool
 
 
+def emit_metadata(out_dir):
+    """Write stagec_metadata.parquet from an EXISTING pool jsonl (no Tulu re-sample)."""
+    import pandas as pd
+    pool = read_jsonl(os.path.join(out_dir, "stagec_pool.jsonl"))
+    cols = ["pool_row_idx", "id", "source", "skill_label", "language", "resource_bucket",
+            "quality_score", "is_clean", "is_noised"]
+    path = os.path.join(out_dir, "stagec_metadata.parquet")
+    pd.DataFrame([{c: r.get(c) for c in cols} for r in pool]).to_parquet(path, index=False)
+    bad = sum(1 for i, r in enumerate(pool) if r.get("pool_row_idx") != i)
+    print(f"metadata -> {path} ({len(pool)} rows); pool_row_idx==position violations: {bad}")
+    if bad:
+        raise SystemExit("pool_row_idx != position — perplexity selections would mis-map.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Build the Stage-C realistic pool + noised variant.")
     ap.add_argument("--mode", choices=["build", "materialize"], default="build")
@@ -155,9 +169,15 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out_dir", default="audit/results/stagec/phase1/pools")
     ap.add_argument("--verify_against", default=None)
+    ap.add_argument("--emit_metadata", action="store_true",
+                    help="Just write stagec_metadata.parquet from the existing pool (no rebuild).")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     dose_path = os.path.join(args.out_dir, "stagec_dose.jsonl")
+
+    if args.emit_metadata:
+        emit_metadata(args.out_dir)
+        return
 
     base = build_base(args.sample_size, args.seed, args.out_dir)
     base_ids = {str(r["id"]) for r in base}
@@ -181,13 +201,7 @@ def main():
     clean = finalize(base, list(injected), args.out_dir, "stagec_pool")
     noised, noise_counts = make_noised(clean, NOISE_FRAC, args.seed)
     write_jsonl(os.path.join(args.out_dir, "stagec_pool_noised.jsonl"), noised)
-
-    # metadata parquet (id/pool_row_idx + group cols) for the Stage-A perplexity scorer
-    import pandas as pd
-    cols = ["pool_row_idx", "id", "source", "skill_label", "language", "resource_bucket",
-            "quality_score", "is_clean", "is_noised"]
-    pd.DataFrame([{c: r.get(c) for c in cols} for r in clean]).to_parquet(
-        os.path.join(args.out_dir, "stagec_metadata.parquet"), index=False)
+    emit_metadata(args.out_dir)   # metadata parquet for the Stage-A perplexity scorer
 
     # composition + acceptance
     lang, bucket, skill, dec = compose(clean)
