@@ -1,0 +1,41 @@
+{
+  "stage": "C",
+  "step": "C1-1",
+  "N_abs": 500,
+  "pilot_threshold": 250,
+  "n_inject": 1100,
+  "budget_b": 0.1,
+  "sample_size": 30000,
+  "seed": 42,
+  "base_size": 29390,
+  "pool_size": 37090,
+  "decisive_share": 0.2076,
+  "available": {
+    "ceb": 1100,
+    "hau": 1100,
+    "kir": 1100,
+    "mlt": 1100,
+    "plt": 1100,
+    "som": 1100,
+    "zul": 1100
+  },
+  "noise_counts": {
+    "ceb": 330,
+    "hau": 330,
+    "kir": 330,
+    "mlt": 330,
+    "plt": 330,
+    "som": 330,
+    "zul": 330
+  },
+  "id_checksums": {
+    "ceb": "243b38b93f0785f1",
+    "hau": "53367c4e08b51d38",
+    "kir": "cce664756a915230",
+    "mlt": "21e37cec98a62060",
+    "plt": "932412265c3d6847",
+    "som": "7ccaa45c1d11fffb",
+    "zul": "5970956c4e5e0c3a"
+  },
+  "acceptance": "PASS"
+}

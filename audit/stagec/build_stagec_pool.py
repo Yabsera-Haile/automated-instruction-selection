@@ -193,7 +193,8 @@ def main():
     print(f"per-language available (>= 2*N_abs={2*N_ABS}): {avail}  all_ok={ge_2nabs}")
     print("resource_bucket:", dict(sorted(bucket.items(), key=lambda x: str(x[0]))))
     print("skill (top6):", dict(skill.most_common(6)))
-    print(f"multilingual share: {sum(v for l,v in lang.items() if l in set(DECISIVE) or skill)/len(clean):.1%}")
+    print(f"multilingual(skill) share: {skill.get('multilingual', 0) / len(clean):.1%} "
+          f"| low-resource buckets 0-2: {(bucket[0]+bucket[1]+bucket[2]) / len(clean):.1%}")
 
     # THE INEQUALITY, per language: proportional_slots < pilot_threshold <= N_abs
     print(f"\n=== INEQUALITY @ b={BUDGET_B:.0%} (proportional_slots = b*available) ===")
