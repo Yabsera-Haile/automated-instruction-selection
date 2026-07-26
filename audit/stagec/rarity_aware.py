@@ -28,10 +28,11 @@ from __future__ import annotations
 
 import collections
 
-# Group extractors for the two audit axes.
+# Group extractors for the audit axes.
 GROUP_KEYS = {
     "resource_tier": lambda r: r.get("resource_bucket"),
     "skill": lambda r: r.get("skill_label"),
+    "language": lambda r: r.get("language"),
 }
 
 
@@ -53,11 +54,18 @@ def default_quality_gate(row: dict, min_chars: int = 1, max_chars: int = 500_000
 
 def rarity_aware_select(pool, base_scores, higher_is_better, budget, *,
                         floor_mode="none", n_abs=0, group_key="resource_tier",
-                        quality_gate=True, quality_fn=None, id_key="id"):
+                        quality_gate=True, quality_fn=None, id_key="id",
+                        protected_groups=None):
     """Partition `budget` across groups and gate invalid rows; fill each group by the base
     selector's score. `base_scores` maps str(id) -> float (the plain selector's own score);
     `higher_is_better` says whether higher score is kept (e.g. quality/perplexity-high True,
-    perplexity-low False). Never recomputes a score."""
+    perplexity-low False). Never recomputes a score.
+
+    `protected_groups` (absolute/hybrid only): if given, the N_abs floor is applied ONLY to
+    these groups (the audited rare groups); every other group gets no floor and competes
+    pool-wide for the leftover. This keeps the floor within budget on a many-group axis like
+    language (flooring all ~200 languages to N_abs would overflow a small budget)."""
+    prot = set(protected_groups) if protected_groups is not None else None
     gf = GROUP_KEYS[group_key] if isinstance(group_key, str) else group_key
     gate = (quality_fn or default_quality_gate) if quality_gate else (lambda r: True)
     sid = lambda r: str(r[id_key])
@@ -91,11 +99,11 @@ def rarity_aware_select(pool, base_scores, higher_is_better, budget, *,
             avail = len(rows)
             prop = round(k * avail / n_gated) if n_gated else 0
             if floor_mode == "proportional":
-                r_slots = prop
+                r_slots = prop                                   # restores full group shape
             elif floor_mode == "absolute":
-                r_slots = n_abs
-            else:  # hybrid
-                r_slots = max(prop, n_abs)
+                r_slots = n_abs if (prot is None or g in prot) else 0
+            else:  # hybrid: floor protected to max(prop, N_abs); others compete for leftover
+                r_slots = max(prop, n_abs) if (prot is None or g in prot) else 0
             req[g] = min(r_slots, avail)
         # (3) within-group fill by base score
         for g, rows in by_group.items():

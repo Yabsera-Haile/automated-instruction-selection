@@ -182,6 +182,13 @@ def main():
     noised, noise_counts = make_noised(clean, NOISE_FRAC, args.seed)
     write_jsonl(os.path.join(args.out_dir, "stagec_pool_noised.jsonl"), noised)
 
+    # metadata parquet (id/pool_row_idx + group cols) for the Stage-A perplexity scorer
+    import pandas as pd
+    cols = ["pool_row_idx", "id", "source", "skill_label", "language", "resource_bucket",
+            "quality_score", "is_clean", "is_noised"]
+    pd.DataFrame([{c: r.get(c) for c in cols} for r in clean]).to_parquet(
+        os.path.join(args.out_dir, "stagec_metadata.parquet"), index=False)
+
     # composition + acceptance
     lang, bucket, skill, dec = compose(clean)
     dec_share = dec / len(clean)
