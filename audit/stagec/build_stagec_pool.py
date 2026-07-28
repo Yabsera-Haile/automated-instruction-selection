@@ -111,8 +111,17 @@ def collect_muri(iso, config, n, base_ids, lid, max_scan=60000):
     return rows
 
 
+# Low-perplexity degenerate response: a long run of the single most predictable token.
+# Repetition drives full-sequence perplexity toward zero, so perplexity-low OVER-selects it --
+# this is exactly the junk the quality gate exists to catch. (An earlier corruption truncated
+# the response to 8 chars, which RAISED perplexity; perplexity-low then filtered it on its own
+# -- 2.2% admitted -- so it could not exercise the gate.)
+DEGENERATE_RESPONSE = ("the " * 200).strip()
+
+
 def make_noised(pool, frac, seed):
-    """Corrupt frac of each decisive language: is_noised=True + truncated response."""
+    """Corrupt frac of each decisive language: is_noised=True + a LOW-perplexity degenerate
+    (repetitive) response, the adversarial case for a perplexity-low selector."""
     rng = random.Random(seed)
     by_lang = collections.defaultdict(list)
     for i, r in enumerate(pool):
@@ -127,7 +136,7 @@ def make_noised(pool, frac, seed):
             noised[i]["is_clean"] = False
             for m in noised[i]["messages"]:            # actually degrade the response
                 if m["role"] == "assistant":
-                    m["content"] = (m["content"] or "")[:8]   # broken fragment
+                    m["content"] = DEGENERATE_RESPONSE   # low-ppl repetition junk
         counts[lang] = k
     return noised, counts
 
@@ -171,12 +180,23 @@ def main():
     ap.add_argument("--verify_against", default=None)
     ap.add_argument("--emit_metadata", action="store_true",
                     help="Just write stagec_metadata.parquet from the existing pool (no rebuild).")
+    ap.add_argument("--renoise", action="store_true",
+                    help="Re-derive stagec_pool_noised.jsonl from the existing clean pool with "
+                         "the current corruption (no Tulu re-sample). For the C1-Step 5 gate ablation.")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     dose_path = os.path.join(args.out_dir, "stagec_dose.jsonl")
 
     if args.emit_metadata:
         emit_metadata(args.out_dir)
+        return
+
+    if args.renoise:
+        clean = read_jsonl(os.path.join(args.out_dir, "stagec_pool.jsonl"))
+        noised, counts = make_noised(clean, NOISE_FRAC, args.seed)
+        write_jsonl(os.path.join(args.out_dir, "stagec_pool_noised.jsonl"), noised)
+        print(f"re-noised {sum(counts.values())} rows ({counts}) with low-ppl repetition -> "
+              f"stagec_pool_noised.jsonl (clean pool untouched)")
         return
 
     base = build_base(args.sample_size, args.seed, args.out_dir)
