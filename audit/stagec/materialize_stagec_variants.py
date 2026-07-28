@@ -40,6 +40,17 @@ CONDITIONS = [
     ("perplexity-low__proportional-nogate", "proportional", False, True),   # DRoP analog
 ]
 
+# C1-Step 5 quality-gate ablation (on the NOISED pool): the SAME absolute floor with the gate
+# ON vs OFF. Gate-on filters the ~30% corrupted (is_noised, truncated) decisive rows BEFORE
+# flooring -> 500 clean/lang. Gate-off ranks them by the same perplexity-low score; because
+# truncation strips the hard native response, noised rows score LOWER perplexity and are
+# preferentially kept -> the floor rescues corrupted data. Both selections are deterministic,
+# so the 3 seeds are TRAINING seeds on the same subset (as elsewhere in Stage C).
+NOISED_CONDITIONS = [
+    ("perplexity-low__absolute-gateon", "absolute", True, True),
+    ("perplexity-low__absolute-gateoff", "absolute", False, True),
+]
+
 
 def read_jsonl(p):
     return [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
@@ -85,11 +96,11 @@ def allocation_report(pool, id2lang):
     return ok
 
 
-def materialize(pool, id2lang, nlls_path, out_dir):
-    """Full materialization using perplexity-low NLLs (lower NLL kept: higher_is_better=False)."""
+def load_scores(pool, nlls_path):
+    """Map the perplexity NLL pickle (keyed by pool_row_idx) to {str(id): nll}; abort if any
+    pool row lacks a score (the pool_row_idx==position invariant makes this exact)."""
     with open(nlls_path, "rb") as f:
         nll = pickle.load(f)                          # {pool_row_idx or id: nll}
-    # map to str(id) scores
     idx2id = {r.get("pool_row_idx"): str(r["id"]) for r in pool}
     scores = {}
     for key, v in nll.items():
@@ -98,6 +109,12 @@ def materialize(pool, id2lang, nlls_path, out_dir):
     missing = [str(r["id"]) for r in pool if str(r["id"]) not in scores]
     if missing:
         raise SystemExit(f"{len(missing)} pool rows lack an NLL score (e.g. {missing[:3]}).")
+    return scores
+
+
+def materialize(pool, id2lang, nlls_path, out_dir):
+    """Full materialization using perplexity-low NLLs (lower NLL kept: higher_is_better=False)."""
+    scores = load_scores(pool, nlls_path)
     k = round(BUDGET_B * len(pool))
     os.makedirs(out_dir, exist_ok=True)
     id2row = {str(r["id"]): r for r in pool}
@@ -133,16 +150,74 @@ def materialize(pool, id2lang, nlls_path, out_dir):
         print(f"  {tag:44} total={r['total']:6} decisive={r['decisive']}")
 
 
+def noised_ablation(pool, id2lang, nlls_path, out_dir):
+    """C1-Step 5: materialize the absolute floor with the gate ON vs OFF on the NOISED pool,
+    and report how much corrupted data each admits into the decisive slots."""
+    scores = load_scores(pool, nlls_path)
+    k = round(BUDGET_B * len(pool))
+    os.makedirs(out_dir, exist_ok=True)
+    id2row = {str(r["id"]): r for r in pool}
+    id2noised = {str(r["id"]): bool(r.get("is_noised")) for r in pool}
+    print(f"pool={len(pool)} (noised rows={sum(id2noised.values())}) budget k={k} N_abs={N_ABS}\n")
+    print(f"{'condition':40} {'kept':>5} {'decisive_kept':>13} {'noised_kept(decisive)':>21}")
+    report = {}
+    for name, mode, gate, _ in NOISED_CONDITIONS:
+        for seed in SEEDS:                       # deterministic selection -> training seeds
+            r = rarity_aware_select(pool, scores, False, k, floor_mode=mode, n_abs=N_ABS,
+                                    group_key="language", quality_gate=gate,
+                                    protected_groups=DECISIVE)
+            tag = f"{name}__s{seed}"
+            with open(os.path.join(out_dir, f"{tag}.jsonl"), "w", encoding="utf-8") as f:
+                for i in r["selected_ids"]:
+                    f.write(json.dumps(id2row[i], ensure_ascii=False) + "\n")
+            dc = decisive_counts(r["selected_ids"], id2lang)
+            noised_dec = collections.Counter(
+                id2lang[i] for i in r["selected_ids"]
+                if id2noised.get(i) and id2lang.get(i) in DECISIVE)
+            report[tag] = {"total": r["total"], "decisive": dc,
+                           "noised_kept": {l: noised_dec.get(l, 0) for l in DECISIVE},
+                           "noised_kept_total": sum(noised_dec.values())}
+            if seed == 0:                        # per-condition line (seeds identical)
+                per = dc[DECISIVE[0]]
+                uni = all(v == per for v in dc.values())
+                print(f"{name:40} {r['total']:>5} "
+                      f"{(str(per)+'/lang' if uni else 'mixed'):>13} "
+                      f"{sum(noised_dec.values()):>21}")
+    json.dump(report, open(os.path.join(out_dir, "noised_ablation_report.json"), "w"), indent=2)
+    on = report["perplexity-low__absolute-gateon__s0"]["noised_kept_total"]
+    off = report["perplexity-low__absolute-gateoff__s0"]["noised_kept_total"]
+    print(f"\nGATE EFFECT: gate-on admits {on} corrupted decisive rows; "
+          f"gate-off admits {off}. Expect on==0 and off>0 (perplexity-low prefers the "
+          f"low-ppl truncated rows).")
+    if on != 0:
+        raise SystemExit(f"gate-on admitted {on} noised rows — the gate is not filtering.")
+    print(f"materialized {len(report)} subsets -> {out_dir}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Materialize the Stage-C perplexity-low variants.")
-    ap.add_argument("--pool", default="audit/results/stagec/phase1/pools/stagec_pool.jsonl")
+    ap.add_argument("--pool", default=None,
+                    help="Pool jsonl (default: clean pool, or noised pool with --noised_ablation).")
     ap.add_argument("--nlls", default=None, help="perplexity-low NLL pickle over THIS pool.")
-    ap.add_argument("--out_dir", default="audit/results/stagec/phase1/subsets")
+    ap.add_argument("--out_dir", default=None)
     ap.add_argument("--allocation_only", action="store_true")
+    ap.add_argument("--noised_ablation", action="store_true",
+                    help="C1-Step 5: absolute floor gate-on vs gate-off on the noised pool.")
     args = ap.parse_args()
-    pool = read_jsonl(args.pool)
+    pool_default = ("audit/results/stagec/phase1/pools/stagec_pool_noised.jsonl"
+                    if args.noised_ablation
+                    else "audit/results/stagec/phase1/pools/stagec_pool.jsonl")
+    out_default = ("audit/results/stagec/phase1/subsets_noised" if args.noised_ablation
+                   else "audit/results/stagec/phase1/subsets")
+    pool_path = args.pool or pool_default
+    out_dir = args.out_dir or out_default
+    pool = read_jsonl(pool_path)
     id2lang = {str(r["id"]): r.get("language") for r in pool}
-    if args.allocation_only or not args.nlls:
+    if args.noised_ablation:
+        if not args.nlls:
+            raise SystemExit("--noised_ablation needs --nlls (perplexity NLLs over the NOISED pool).")
+        noised_ablation(pool, id2lang, args.nlls, out_dir)
+    elif args.allocation_only or not args.nlls:
         ok = allocation_report(pool, id2lang)
         if not args.allocation_only:
             print("\n(no --nlls given: printed the score-independent allocation only; pass the "
@@ -150,7 +225,7 @@ def main():
         if not ok:
             raise SystemExit(1)
     else:
-        materialize(pool, id2lang, args.nlls, args.out_dir)
+        materialize(pool, id2lang, args.nlls, out_dir)
 
 
 if __name__ == "__main__":

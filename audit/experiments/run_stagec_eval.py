@@ -112,6 +112,9 @@ def eval_condition(cond, adapter, args):
         print("  $ " + " ".join(cmd), flush=True)
         subprocess.run(cmd, check=True)
 
+    if getattr(args, "ppl_only", False):
+        print(f"[{cond}] ppl-only: skipped lm-eval (belebele/flores/mmlu)", flush=True)
+        return
     work = os.path.join(args.out_root, "metrics", "lm_eval", cond)
     # 2+5) Belebele per language (loglik) -- decisive + control
     if not glob.glob(os.path.join(work, "belebele", "**", "results*.json"), recursive=True):
@@ -226,7 +229,7 @@ def assemble(args):
     # ---- coverage check: every cell has both axes ----
     print("\n" + "=" * 96)
     have_help = set(df[(df.axis == "help") & (df.metric == "heldout_ppl")].condition)
-    have_cost = set(df[df.metric == "mmlu"].condition) & set(
+    have_cost = set(df[df.metric == "mmlu"].condition) | set(
         df[(df.axis == "cost") & (df.metric == "heldout_ppl")].condition)
     missing = [c for c in order if c not in (have_help & have_cost)]
     print(f"Coverage: {len(have_help & have_cost)}/{len(order)} cells have BOTH axes"
@@ -245,6 +248,8 @@ def main():
                     help="MMLU examples per subject (5-shot). 100 keeps 18 cells tractable.")
     ap.add_argument("--batch_size", type=int, default=4)
     ap.add_argument("--gpus", default="0,1,2")
+    ap.add_argument("--ppl_only", action="store_true",
+                    help="Only held-out perplexity (decisive + control); skip belebele/flores/mmlu.")
     ap.add_argument("--assemble_only", action="store_true")
     ap.add_argument("--worker_cond", default=None)
     args = ap.parse_args()
@@ -277,6 +282,8 @@ def main():
                    "--out_root", args.out_root, "--ckpt_dir", args.ckpt_dir,
                    "--flores_tasks", args.flores_tasks, "--flores_limit", str(args.flores_limit),
                    "--mmlu_limit", str(args.mmlu_limit), "--batch_size", str(args.batch_size)]
+            if args.ppl_only:
+                cmd.append("--ppl_only")
             p = subprocess.Popen(cmd, env=env, stdout=lf, stderr=subprocess.STDOUT)
             running.append({"cond": cond, "gpu": gpu, "p": p, "lf": lf})
             logger.info("launch %-40s on GPU%s", cond, gpu)
