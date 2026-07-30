@@ -1,0 +1,20 @@
+{
+  "_about": "Per-axis, per-group N_abs (absolute-floor target) for the Stage-C rarity-aware wrapper. Consumed by rarity_aware.load_nabs(axis). A group is only FLOORED to N_abs if it also passes the qualifying rule (available_after_gate >= N_abs AND natural_retention < N_abs).",
+  "language": {
+    "_derivation": "Phase-1 density-gate pilot (plt/Malagasy, gemma-3-4b-pt): held-out ppl liftoff ~250 examples (66% of the total gain by 250), plateau by ~1000. N_abs=500 sits above liftoff, solidly in the learned regime. Uniform per injected decisive language (all 7 are equally rare by construction). Corroborated by Stage-B R2 control-format threshold at ~5% budget (~542 ex).",
+    "default": 500
+  },
+  "skill": {
+    "_derivation": "Stage-B Round-2 (Qwen2.5-1.5B) per-skill native benchmark vs budget {1,5,10,100%} on ~10.8k pool (ROUND2_SUMMARY.md). TWO REGIMES: (A) DENSE, base-saturated skills whose benchmark does NOT improve with SFT need only DELETION-PREVENTION -- a small floor (~150, the ~1% budget count) that keeps the skill non-zero so a deleter selector cannot degrade it, NOT concentration. (B) budget-limited / rare skills that must REACH a learnability threshold take the language-scale floor (~500, the ~5% MMLU/format threshold). Per-skill benchmark curves are from a different model+pool, so these are principled defaults with a recorded basis; a skill dose-pilot on gemma-3-4b-pt would refine them (C2 later step). N_abs is only a TARGET; the qualifying rule + availability decide who is actually floored.",
+    "math":                  {"n_abs": 150, "regime": "dense/deletion-prevention", "basis": "GSM8K strict base 0.605 ~= full 0.625: saturated on the base, NOT budget-limited, but selection-sensitive (low-high +0.05@10%). Floor only prevents a deleter (perplexity-high) from zeroing it; concentration is wasteful."},
+    "code":                  {"n_abs": 150, "regime": "dense/deletion-prevention", "basis": "MBPP flat ~0.46-0.48 across all budgets: barely responds to general-instruction SFT. Small deletion-prevention floor; no threshold to reach."},
+    "chat":                  {"n_abs": 150, "regime": "dense/deletion-prevention", "basis": "wildchat/oasst/no_robots are large in Tulu; chat format is dense and cheaply learned -> deletion-prevention only."},
+    "general":               {"n_abs": 150, "regime": "dense/deletion-prevention", "basis": "flan_v2 is very large; general ability is dense -> deletion-prevention only."},
+    "science":               {"n_abs": 500, "regime": "rare/reach-threshold", "basis": "sciriff_10k is small; science tracks MMLU which crosses chance->learned at ~5% (~542 ex). Needs the language-scale floor to reach threshold."},
+    "safety":                {"n_abs": 500, "regime": "rare/reach-threshold", "basis": "wildjailbreak/wildguard/coconot are a minority; safety behavior needs enough density to install -> reach-threshold."},
+    "instruction_following": {"n_abs": 500, "regime": "rare/no-plateau", "basis": "IFEval climbs MONOTONICALLY 0.13->0.205 with no plateau by 100% -> more is always better; floor as high as availability allows, capped at the language scale (500) pending a dose-pilot."},
+    "multilingual":          {"n_abs": 500, "regime": "rare/reach-threshold", "basis": "the injected low-resource skill; matches the language-axis floor (these are the MURI rows)."},
+    "other":                 {"n_abs": 250, "regime": "catch-all", "basis": "heterogeneous residual; conservative mid floor, mostly deletion-prevention."},
+    "default": 250
+  }
+}

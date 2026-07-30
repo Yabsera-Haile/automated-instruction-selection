@@ -52,6 +52,58 @@ def default_quality_gate(row: dict, min_chars: int = 1, max_chars: int = 500_000
     return min_chars <= total <= max_chars
 
 
+def _resolve_nabs(group, n_abs) -> int:
+    """N_abs may be a scalar (uniform) OR a per-group dict {group: int | {"n_abs": int, ...}}
+    with an optional 'default'. Returns the integer floor for `group`."""
+    if isinstance(n_abs, dict):
+        v = n_abs.get(group, n_abs.get("default", 0))
+        return int(v["n_abs"] if isinstance(v, dict) else v)
+    return int(n_abs)
+
+
+def load_nabs(axis: str, path: str = "audit/configs/n_abs_by_axis.json") -> dict:
+    """Load the per-axis N_abs config -> {group: int, 'default': int}. `axis` in {language, skill}.
+    Strips `_derivation`/comment keys and flattens the {group: {n_abs, regime, basis}} records."""
+    import json
+    ax = json.load(open(path, encoding="utf-8"))[axis]
+    return {k: int(v["n_abs"] if isinstance(v, dict) else v)
+            for k, v in ax.items() if not k.startswith("_")}
+
+
+def qualifying_groups(pool, base_scores, higher_is_better, budget, *, n_abs,
+                      group_key="language", quality_gate=True, quality_fn=None, id_key="id"):
+    """Protected-set BY RULE (never an oracle list). A group g qualifies for a floor iff
+        (a) available_after_gate[g] >= N_abs[g]   -- CAN be floored (enough valid supply), AND
+        (b) natural_retention[g]    <  N_abs[g]   -- NEEDS the floor (the plain selector keeps
+                                                     fewer than N_abs of it on its own).
+    natural_retention is the count of g in the plain pool-wide top-k (floor_mode="none").
+    Returns (sorted qualifying list, per-group report with the rule's inputs and verdict)."""
+    gf = GROUP_KEYS[group_key] if isinstance(group_key, str) else group_key
+    gate = (quality_fn or default_quality_gate) if quality_gate else (lambda r: True)
+    sid = lambda r: str(r[id_key])
+    score = lambda r: base_scores[sid(r)]
+    n_pool = len(pool)
+    k = round(budget * n_pool) if (isinstance(budget, float) and 0 < budget <= 1) else int(budget)
+
+    gated = [r for r in pool if gate(r)]
+    by_group = collections.defaultdict(list)
+    for r in gated:
+        by_group[gf(r)].append(r)
+    plain = sorted(gated, key=score, reverse=higher_is_better)[:max(0, k)]   # the plain selector
+    natural = collections.Counter(gf(r) for r in plain)
+
+    report, qualifying = {}, []
+    for g, rows in by_group.items():
+        na, avail, nat = _resolve_nabs(g, n_abs), len(rows), natural.get(g, 0)
+        floorable, needs = (avail >= na and na > 0), (nat < na)
+        q = floorable and needs
+        report[g] = {"available_after_gate": avail, "natural_retention": nat, "n_abs": na,
+                     "floorable": floorable, "needs_floor": needs, "qualifies": q}
+        if q:
+            qualifying.append(g)
+    return sorted(qualifying, key=str), report
+
+
 def rarity_aware_select(pool, base_scores, higher_is_better, budget, *,
                         floor_mode="none", n_abs=0, group_key="resource_tier",
                         quality_gate=True, quality_fn=None, id_key="id",
@@ -61,12 +113,24 @@ def rarity_aware_select(pool, base_scores, higher_is_better, budget, *,
     `higher_is_better` says whether higher score is kept (e.g. quality/perplexity-high True,
     perplexity-low False). Never recomputes a score.
 
+    `n_abs` may be a scalar (uniform floor) OR a per-group dict {group: int} / {group: {"n_abs":
+    int, ...}} with an optional 'default' -- so language (uniform 500) and skill (per-skill,
+    derived from Stage B) both work via one call. `group_key` in {resource_tier, skill, language}.
+
     `protected_groups` (absolute/hybrid only): if given, the N_abs floor is applied ONLY to
     these groups (the audited rare groups); every other group gets no floor and competes
     pool-wide for the leftover. This keeps the floor within budget on a many-group axis like
-    language (flooring all ~200 languages to N_abs would overflow a small budget)."""
-    prot = set(protected_groups) if protected_groups is not None else None
+    language (flooring all ~200 languages to N_abs would overflow a small budget). Pass
+    "auto" to derive the protected set BY RULE via qualifying_groups() (floorable AND
+    needs-the-floor) instead of an oracle list."""
     gf = GROUP_KEYS[group_key] if isinstance(group_key, str) else group_key
+    if protected_groups == "auto":
+        prot, _ = qualifying_groups(pool, base_scores, higher_is_better, budget, n_abs=n_abs,
+                                    group_key=group_key, quality_gate=quality_gate,
+                                    quality_fn=quality_fn, id_key=id_key)
+        prot = set(prot)
+    else:
+        prot = set(protected_groups) if protected_groups is not None else None
     gate = (quality_fn or default_quality_gate) if quality_gate else (lambda r: True)
     sid = lambda r: str(r[id_key])
     score = lambda r: base_scores[sid(r)]
@@ -98,12 +162,13 @@ def rarity_aware_select(pool, base_scores, higher_is_better, budget, *,
         for g, rows in by_group.items():
             avail = len(rows)
             prop = round(k * avail / n_gated) if n_gated else 0
+            na = _resolve_nabs(g, n_abs)                         # per-group (or uniform) floor
             if floor_mode == "proportional":
                 r_slots = prop                                   # restores full group shape
             elif floor_mode == "absolute":
-                r_slots = n_abs if (prot is None or g in prot) else 0
+                r_slots = na if (prot is None or g in prot) else 0
             else:  # hybrid: floor protected to max(prop, N_abs); others compete for leftover
-                r_slots = max(prop, n_abs) if (prot is None or g in prot) else 0
+                r_slots = max(prop, na) if (prot is None or g in prot) else 0
             req[g] = min(r_slots, avail)
         # (3) within-group fill by base score
         for g, rows in by_group.items():
@@ -127,7 +192,8 @@ def rarity_aware_select(pool, base_scores, higher_is_better, budget, *,
             "budget": k, "total": total,
             "shortfall": max(0, k - total), "overflow": max(0, total - k),
             "gate_drops": dict(gate_drops), "allocation": dict(alloc),
-            "floor_mode": floor_mode, "n_abs": n_abs, "group_key": group_key}
+            "floor_mode": floor_mode, "n_abs": n_abs, "group_key": group_key,
+            "protected": sorted(prot, key=str) if prot is not None else None}
 
 
 # --------------------------------------------------------------------------- self-test ----
@@ -225,5 +291,82 @@ def selftest() -> None:
     print("[selftest] PASS — gate/floors/within-group ranking correct; scoring unchanged; report correct.")
 
 
+def _axis_pool():
+    """A pool exercising BOTH axes and the qualifying rule. `perplexity-low` (keep LOW score)
+    is the plain selector: rare/eroded groups are given HIGH scores so the plain top-k deletes
+    them. Language axis: 3 rare langs (rare0..2, avail 60, deleted) + 1 dense control (eng,
+    avail 400, kept). Skill axis: 1 dense skill (math, avail 400, kept) + 1 rare eroded skill
+    (science, avail 60, deleted) + 1 too-scarce skill (safety, avail 20)."""
+    rows, sc, i = [], {}, 0
+
+    def add(n, lang, skill, hi_score):
+        nonlocal i
+        for _ in range(n):
+            rid = f"r{i}"
+            rows.append({"id": rid, "language": lang, "skill_label": skill,
+                         "resource_bucket": 2 if lang.startswith("rare") else 5,
+                         "is_noised": False,
+                         "messages": [{"role": "user", "content": "q"},
+                                      {"role": "assistant", "content": "a"}]})
+            # HIGH score => deleted by perplexity-low (keep lowest); LOW => kept.
+            sc[rid] = 100.0 + (i % 50) if hi_score else (i % 50) * 0.001
+            i += 1
+    add(400, "eng", "math", hi_score=False)     # dense lang + dense skill, KEPT by ppl-low
+    add(60, "rare0", "science", hi_score=True)  # rare lang + rare skill, DELETED
+    add(60, "rare1", "science", hi_score=True)
+    add(60, "rare2", "science", hi_score=True)
+    add(20, "eng", "safety", hi_score=True)     # too-scarce skill (avail 20 < N_abs)
+    return rows, sc
+
+
+def selftest_c2() -> None:
+    """C2-Step 7: axis generalization (language + skill), per-group N_abs, and the
+    protected-set-BY-RULE (qualifying_groups)."""
+    pool, sc = _axis_pool()
+    LO = False  # perplexity-low: keep lowest score
+
+    # (a) qualifying rule on the LANGUAGE axis: rare0/1/2 qualify (avail 60 >= 50, natural 0 <
+    #     50); eng does NOT (kept naturally, needs_floor False).
+    ql, repl = qualifying_groups(pool, sc, LO, budget=0.10, n_abs=50, group_key="language")
+    assert ql == ["rare0", "rare1", "rare2"], ql
+    assert repl["eng"]["needs_floor"] is False and repl["rare0"]["qualifies"] is True
+    print(f"[c2] language-axis qualifying set = {ql} (eng excluded: naturally kept) — OK")
+
+    # (b) qualifying rule on the SKILL axis with PER-SKILL N_abs (science reach-threshold 50,
+    #     math deletion-prevention 30, safety 50). science qualifies (avail 180 >= 50, natural
+    #     0). math does NOT (kept naturally). safety does NOT (avail 20 < 50: not floorable).
+    nabs_skill = {"science": 50, "math": 30, "safety": 50, "default": 40}
+    qs, reps = qualifying_groups(pool, sc, LO, budget=0.10, n_abs=nabs_skill, group_key="skill")
+    assert qs == ["science"], qs
+    assert reps["math"]["needs_floor"] is False, reps["math"]
+    assert reps["safety"]["floorable"] is False and reps["safety"]["available_after_gate"] == 20
+    print(f"[c2] skill-axis qualifying set = {qs} (math kept; safety too scarce) — "
+          f"per-group N_abs applied — OK")
+
+    # (c) protected_groups='auto' floors exactly the qualifying set, with per-group N_abs.
+    r = rarity_aware_select(pool, sc, LO, budget=0.10, floor_mode="absolute", n_abs=nabs_skill,
+                            group_key="skill", protected_groups="auto")
+    assert r["protected"] == ["science"], r["protected"]
+    assert r["allocation"]["science"]["filled"] == 50, r["allocation"]["science"]
+    assert r["allocation"]["math"]["requested"] == 0                 # not protected -> no floor
+    print(f"[c2] auto-protect floored {r['protected']} to "
+          f"{r['allocation']['science']['filled']} (=N_abs 50); math floor=0 — OK")
+
+    # (d) the shipped config loads and flattens per axis.
+    import os
+    cfgp = "audit/configs/n_abs_by_axis.json"
+    if os.path.exists(cfgp):
+        lang_nabs, skill_nabs = load_nabs("language", cfgp), load_nabs("skill", cfgp)
+        assert lang_nabs["default"] == 500
+        assert skill_nabs["math"] == 150 and skill_nabs["science"] == 500  # dense vs rare
+        assert _resolve_nabs("math", skill_nabs) == 150
+        print(f"[c2] config: language default={lang_nabs['default']}, "
+              f"skill math={skill_nabs['math']} (deletion-prevention) vs "
+              f"science={skill_nabs['science']} (reach-threshold) — OK")
+
+    print("[c2] PASS — both axes, per-group N_abs, and qualifying-by-rule correct.")
+
+
 if __name__ == "__main__":
     selftest()
+    selftest_c2()
