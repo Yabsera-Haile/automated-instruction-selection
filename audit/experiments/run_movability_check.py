@@ -31,6 +31,10 @@ import sys
 
 from audit.stageb.run_eval import run_lm_eval, pick_metric, get_metric
 
+# Loglik (multiple-choice) tasks materialize full-vocab logits, so on Gemma-4B's ~262k vocab
+# they OOM at the generation batch size -- run them at a smaller batch (as run_stagec_eval does).
+LOGLIK = {"mmlu", "mmlu_stem"}
+
 # (name, lm_eval tasks, num_fewshot, gen_kwargs, code_exec, skill, primary metric key or None)
 BENCHMARKS = [
     ("gsm8k",     ["gsm8k"],     8,    "max_gen_toks=512", False, "math",
@@ -73,9 +77,10 @@ def eval_model(tag, adapter, args):
         if bench_metric(results, name) is not None:
             print(f"[{tag}] {name}: present, skip", flush=True)
             continue
+        bs = args.loglik_batch_size if name in LOGLIK else args.batch_size
         r = run_lm_eval(margs, tasks, nfs, genkw, codex,
                         os.path.join(args.out_root, "work", tag, name),
-                        args.batch_size, args.limit, apply_ct)
+                        bs, args.limit, apply_ct)
         results.update(r)
         json.dump(results, open(out_path, "w"), indent=2)
         print(f"[{tag}] {name}: saved", flush=True)
@@ -149,7 +154,9 @@ def main():
     ap.add_argument("--ckpt_dir", default="audit/results/stagec/phase1/checkpoints")
     ap.add_argument("--out_root", default="audit/results/stagec/phase2/movability")
     ap.add_argument("--limit", type=int, default=200, help="Examples per task (0=full).")
-    ap.add_argument("--batch_size", type=int, default=8)
+    ap.add_argument("--batch_size", type=int, default=8, help="Generation tasks (gsm8k/mbpp/ifeval).")
+    ap.add_argument("--loglik_batch_size", type=int, default=2,
+                    help="MMLU/MMLU-STEM loglik batch (small: 262k-vocab log_softmax OOMs at 8).")
     ap.add_argument("--gpus", default="0,1,2")
     ap.add_argument("--assemble_only", action="store_true")
     ap.add_argument("--worker_tag", default=None)
@@ -184,7 +191,8 @@ def main():
             cmd = [sys.executable, "-m", "audit.experiments.run_movability_check",
                    "--worker_tag", tag, "--base_model", args.base_model,
                    "--ckpt_dir", args.ckpt_dir, "--out_root", args.out_root,
-                   "--limit", str(args.limit), "--batch_size", str(args.batch_size)]
+                   "--limit", str(args.limit), "--batch_size", str(args.batch_size),
+                   "--loglik_batch_size", str(args.loglik_batch_size)]
             running.append({"tag": tag, "gpu": gpu, "lf": lf,
                             "p": subprocess.Popen(cmd, env=env, stdout=lf,
                                                   stderr=subprocess.STDOUT)})
