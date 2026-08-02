@@ -1,0 +1,1254 @@
+{
+  "selectors": [
+    "perplexity-high",
+    "perplexity-low",
+    "perplexity-mid",
+    "ifd",
+    "semdedup",
+    "quality",
+    "rdsplus",
+    "random"
+  ],
+  "floors": [
+    "none",
+    "proportional",
+    "absolute",
+    "hybrid"
+  ],
+  "axes": [
+    "language",
+    "skill"
+  ],
+  "budgets": [
+    0.1,
+    0.02
+  ],
+  "movable_skills": [
+    "math",
+    "instruction_following",
+    "multilingual"
+  ],
+  "need_stage_a": [
+    "ifd",
+    "semdedup",
+    "quality",
+    "rdsplus"
+  ],
+  "n_unique_cells": 67,
+  "n_new_trainings": 93,
+  "cells": [
+    {
+      "selector": "perplexity-high",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-high",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-high",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-high",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-high",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-high",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-high",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "c2-9-armA",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "phase1",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "c2-9-armA",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "c2-9-armC(IF)",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "phase1",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "c2-9-armA",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "c2-9-armC(IF)",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": "phase1",
+      "wave": "reuse"
+    },
+    {
+      "selector": "perplexity-low",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "perplexity-mid",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "ifd",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "semdedup",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.02,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "multi_seed": true,
+      "decisive": true,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "1_decisive_multiseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "quality",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "rdsplus",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": false,
+      "needs_stage_a": true,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "-",
+      "floor": "none",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "language",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "skill",
+      "floor": "proportional",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "language",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "skill",
+      "floor": "absolute",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "language",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    },
+    {
+      "selector": "random",
+      "axis": "skill",
+      "floor": "hybrid",
+      "budget": 0.1,
+      "seeds": [
+        0
+      ],
+      "multi_seed": false,
+      "decisive": false,
+      "have_scores": true,
+      "needs_stage_a": false,
+      "reuse": null,
+      "wave": "2_full10pct_singleseed"
+    }
+  ],
+  "kept_counts": {
+    "language@10%": {
+      "k": 3709,
+      "floorable_groups": [
+        "ceb",
+        "eng",
+        "hau",
+        "kir",
+        "mlt",
+        "plt",
+        "som",
+        "zul"
+      ],
+      "floor_per_focus_group": {
+        "proportional": {
+          "ceb": 110,
+          "hau": 110,
+          "kir": 110,
+          "mlt": 110,
+          "plt": 110,
+          "som": 110,
+          "zul": 110
+        },
+        "absolute": {
+          "ceb": 500,
+          "hau": 500,
+          "kir": 500,
+          "mlt": 500,
+          "plt": 500,
+          "som": 500,
+          "zul": 500
+        },
+        "hybrid": {
+          "ceb": 500,
+          "hau": 500,
+          "kir": 500,
+          "mlt": 500,
+          "plt": 500,
+          "som": 500,
+          "zul": 500
+        }
+      },
+      "subset_size": {
+        "proportional": 3709,
+        "absolute": 3709,
+        "hybrid": 3709
+      }
+    },
+    "language@2%": {
+      "k": 742,
+      "floorable_groups": [
+        "ceb",
+        "eng",
+        "hau",
+        "kir",
+        "mlt",
+        "plt",
+        "som",
+        "zul"
+      ],
+      "floor_per_focus_group": {
+        "proportional": {
+          "ceb": 22,
+          "hau": 22,
+          "kir": 22,
+          "mlt": 22,
+          "plt": 22,
+          "som": 22,
+          "zul": 22
+        },
+        "absolute": {
+          "ceb": 500,
+          "hau": 500,
+          "kir": 500,
+          "mlt": 500,
+          "plt": 500,
+          "som": 500,
+          "zul": 500
+        },
+        "hybrid": {
+          "ceb": 500,
+          "hau": 500,
+          "kir": 500,
+          "mlt": 500,
+          "plt": 500,
+          "som": 500,
+          "zul": 500
+        }
+      },
+      "subset_size": {
+        "proportional": 742,
+        "absolute": 3500,
+        "hybrid": 3500
+      }
+    },
+    "skill@10%": {
+      "k": 3709,
+      "floorable_groups": [
+        "chat",
+        "code",
+        "general",
+        "instruction_following",
+        "math",
+        "multilingual",
+        "safety"
+      ],
+      "floor_per_focus_group": {
+        "proportional": {
+          "math": 1052,
+          "instruction_following": 96,
+          "multilingual": 1035
+        },
+        "absolute": {
+          "math": 150,
+          "instruction_following": 500,
+          "multilingual": 500
+        },
+        "hybrid": {
+          "math": 1052,
+          "instruction_following": 500,
+          "multilingual": 1035
+        }
+      },
+      "subset_size": {
+        "proportional": 3709,
+        "absolute": 3709,
+        "hybrid": 3709
+      }
+    },
+    "skill@2%": {
+      "k": 742,
+      "floorable_groups": [
+        "chat",
+        "code",
+        "general",
+        "instruction_following",
+        "math",
+        "multilingual",
+        "safety"
+      ],
+      "floor_per_focus_group": {
+        "proportional": {
+          "math": 210,
+          "instruction_following": 19,
+          "multilingual": 207
+        },
+        "absolute": {
+          "math": 150,
+          "instruction_following": 500,
+          "multilingual": 500
+        },
+        "hybrid": {
+          "math": 210,
+          "instruction_following": 500,
+          "multilingual": 500
+        }
+      },
+      "subset_size": {
+        "proportional": 742,
+        "absolute": 1150,
+        "hybrid": 1210
+      }
+    }
+  }
+}
