@@ -63,6 +63,8 @@ def score_quality(pool, work_dir, model_name, prompt_template, dtype, batch_size
     """Judge every pool example -> work_dir/quality_scores.pkl {row_idx: score}."""
     os.makedirs(work_dir, exist_ok=True)
     out = os.path.join(work_dir, "quality_scores.pkl")
+    partial = out + ".partial"                      # crash-safe resumable checkpoint
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     sampler = VramSampler()
     if os.path.exists(out) and not force:
         logger.info("Reusing existing quality scores: %s", out)
@@ -103,27 +105,48 @@ def score_quality(pool, work_dir, model_name, prompt_template, dtype, batch_size
         return tokenizer.apply_chat_template(
             [{"role": "user", "content": user}], tokenize=False, add_generation_prompt=True)
 
+    def _generate(batch):
+        prompts = [build_prompt(ex) for ex in batch]
+        enc = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True,
+                        max_length=4096).to(device)
+        with torch.no_grad():
+            gen = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False,
+                                 pad_token_id=tokenizer.pad_token_id)
+        cont = gen[:, enc["input_ids"].shape[1]:]
+        return tokenizer.batch_decode(cont, skip_special_tokens=True)
+
     raw_scores: dict[int, float | None] = {}
+    if os.path.exists(partial) and not force:            # resume a crashed run
+        with open(partial, "rb") as f:
+            raw_scores = {int(k): v for k, v in pickle.load(f).items()}
+        logger.info("Resuming quality: %d / %d already scored", len(raw_scores), len(examples))
     failures = 0
     with sampler:
-        for start in range(0, len(examples), batch_size):
-            batch = examples[start:start + batch_size]
-            prompts = [build_prompt(ex) for ex in batch]
-            enc = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True,
-                            max_length=4096).to(device)
-            with torch.no_grad():
-                gen = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False,
-                                     pad_token_id=tokenizer.pad_token_id)
-            cont = gen[:, enc["input_ids"].shape[1]:]
-            texts = tokenizer.batch_decode(cont, skip_special_tokens=True)
+        for bi, start in enumerate(range(0, len(examples), batch_size)):
+            end = min(start + batch_size, len(examples))
+            if all(i in raw_scores for i in range(start, end)):   # batch already done
+                continue
+            batch = examples[start:end]
+            try:
+                texts = _generate(batch)
+            except torch.OutOfMemoryError:               # pathological long batch -> 1-by-1
+                torch.cuda.empty_cache()
+                logger.warning("OOM at batch %d (rows %d-%d); retrying one-by-one", bi, start, end)
+                texts = []
+                for ex in batch:
+                    texts.extend(_generate([ex]))
+                    torch.cuda.empty_cache()
             for j, txt in enumerate(texts):
                 s = parse_score(txt)
                 if s is None:
                     failures += 1
-                    logger.debug("parse failure (row %d): %r", start + j, txt[:40])
                 raw_scores[start + j] = s
-            if (start + batch_size) % (batch_size * 20) == 0:
-                logger.info("  ...quality scored %d / %d", min(start + batch_size, len(examples)), len(examples))
+            if bi % 40 == 0:                             # checkpoint + defrag
+                with open(partial, "wb") as f:
+                    pickle.dump(raw_scores, f)
+                torch.cuda.empty_cache()
+                logger.info("  ...quality scored %d / %d (checkpointed)",
+                            len(raw_scores), len(examples))
 
     valid = [s for s in raw_scores.values() if s is not None]
     median = statistics.median(valid) if valid else (SCORE_LO + SCORE_HI) / 2
@@ -133,6 +156,8 @@ def score_quality(pool, work_dir, model_name, prompt_template, dtype, batch_size
                 failures, len(scores), median)
     with open(out, "wb") as f:
         pickle.dump(scores, f)
+    if os.path.exists(partial):
+        os.remove(partial)
     return out, sampler, scores
 
 
