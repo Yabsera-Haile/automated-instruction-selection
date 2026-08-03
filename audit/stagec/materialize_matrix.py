@@ -1,0 +1,136 @@
+"""C2-Step 11 Wave 1: materialize the necessity-map cells from Stage-A scores.
+
+Clean-score selectors only (rdsplus/semdedup deferred to Wave 2 with validated adapters). Each
+selector becomes a per-example score the rarity-aware wrapper ranks WITHIN groups; the floor
+(none/proportional/absolute) and the protected set (qualifying-by-rule, restricted to the
+audited focus groups) are unchanged from Phase 1 / C2-Step 9.
+
+Selector -> score adapter:
+  perplexity-low   nlls (lower kept)          perplexity-high  nlls (higher kept)
+  perplexity-mid   -|nll - median| (central)  quality          quality score (higher kept)
+  ifd              IFD, inf->worst (higher)    random           per-seed uniform
+
+Wave-1 cells (the biggest eroders x none/prop/absolute; perplexity-low reused from Phase-1/
+C2-9, so NOT re-materialized here):
+  quality        language 10% + 2%  and  skill 10%   (low-resource / multilingual eroder)
+  perplexity-high skill 10%                            (math deleter -> deletion-prevention)
+  random          skill 10% proportional               (fair-share skill reference)
+Skill axis protects the MOVABLE skills only (math, instruction_following, multilingual); the
+saturated skills (code/general/science) are ratio-only (C2-Step 8 / anchors) and get no cells.
+
+    python -m audit.stagec.materialize_matrix --stage_a audit/results/stagec/phase2/stage_a
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import json
+import math
+import os
+import pickle
+import random
+import statistics
+
+from audit.stagec.rarity_aware import (rarity_aware_select, qualifying_groups, load_nabs,
+                                       default_quality_gate)
+from audit.stagec.materialize_stagec_variants import read_jsonl
+
+DECISIVE = ["ceb", "hau", "kir", "mlt", "plt", "som", "zul"]
+MOVABLE_SKILLS = ["math", "instruction_following", "multilingual"]   # C2-8 / anchors prune
+SPEC = {"perplexity-low": ("ppl_work/nlls.pkl", "low"),
+        "perplexity-high": ("ppl_work/nlls.pkl", "high"),
+        "perplexity-mid": ("ppl_work/nlls.pkl", "mid"),
+        "quality": ("quality_work/quality_scores.pkl", "high"),
+        "ifd": ("ifd_work/ifd_scores.pkl", "high_finite")}
+
+# (selector, axis, floor, budget) -- axis ignored for none. perplexity-low cells are reused.
+WAVE1 = [
+    ("quality", "language", "none", 0.10), ("quality", "language", "proportional", 0.10),
+    ("quality", "language", "absolute", 0.10),
+    ("quality", "language", "none", 0.02), ("quality", "language", "proportional", 0.02),
+    ("quality", "language", "absolute", 0.02),
+    ("quality", "skill", "proportional", 0.10), ("quality", "skill", "absolute", 0.10),
+    ("perplexity-high", "skill", "none", 0.10), ("perplexity-high", "skill", "proportional", 0.10),
+    ("perplexity-high", "skill", "absolute", 0.10),
+    ("random", "skill", "proportional", 0.10),
+]
+SEEDS = [0, 1, 2]
+
+
+def load_scores(selector, stage_a_dir, pool, seed):
+    """Return ({str(id): score}, higher_is_better). random is per-seed uniform."""
+    if selector == "random":
+        rng = random.Random(seed)
+        return {str(r["id"]): rng.random() for r in pool}, True
+    rel, mode = SPEC[selector]
+    raw = pickle.load(open(os.path.join(stage_a_dir, rel), "rb"))    # {pool_row_idx: val}
+    idx2id = {r.get("pool_row_idx"): str(r["id"]) for r in pool}
+    sc = {idx2id[k]: float(v) for k, v in raw.items() if k in idx2id}
+    if mode == "low":
+        return sc, False
+    if mode == "high":
+        return sc, True
+    if mode == "high_finite":                    # ifd: inf = malformed -> never keep
+        lo = min(v for v in sc.values() if math.isfinite(v))
+        return {i: (v if math.isfinite(v) else lo - 1.0) for i, v in sc.items()}, True
+    if mode == "mid":                            # central band: closest to median kept
+        med = statistics.median([v for v in sc.values() if math.isfinite(v)])
+        return {i: -abs(v - med) for i, v in sc.items()}, True
+    raise ValueError(mode)
+
+
+def cell_name(selector, axis, floor, budget):
+    bp = f"{int(round(budget * 100)):02d}"
+    return (f"{selector}__none__b{bp}" if floor == "none"
+            else f"{selector}__{axis}__{floor}__b{bp}")
+
+
+def materialize(stage_a_dir, pool, out_dir, cells):
+    os.makedirs(out_dir, exist_ok=True)
+    id2row = {str(r["id"]): r for r in pool}
+    focus_of = {"language": DECISIVE, "skill": MOVABLE_SKILLS}
+    report = {}
+    for selector, axis, floor, budget in cells:
+        n_abs = load_nabs("skill") if axis == "skill" else 500
+        k = round(budget * len(pool))
+        for seed in SEEDS:
+            scores, hib = load_scores(selector, stage_a_dir, pool, seed)
+            protected = None
+            if floor in ("absolute", "hybrid"):
+                qual, _ = qualifying_groups(pool, scores, hib, k, n_abs=n_abs,
+                                            group_key=axis, quality_gate=True)
+                protected = [g for g in qual if g in focus_of[axis]]
+            r = rarity_aware_select(pool, scores, hib, k, floor_mode=floor, n_abs=n_abs,
+                                    group_key=(axis if floor != "none" else "language"),
+                                    quality_gate=True, protected_groups=protected)
+            name = cell_name(selector, axis, floor, budget)
+            with open(os.path.join(out_dir, f"{name}__s{seed}.jsonl"), "w", encoding="utf-8") as f:
+                for i in r["selected_ids"]:
+                    f.write(json.dumps(id2row[i], ensure_ascii=False) + "\n")
+            if seed == 0:
+                fc = collections.Counter(
+                    (r_["skill_label"] if axis == "skill" else r_["language"])
+                    for r_ in (id2row[i] for i in r["selected_ids"]))
+                foc = {g: fc.get(g, 0) for g in focus_of[axis]}
+                report[name] = {"total": r["total"], "overflow": r["overflow"],
+                                "protected": protected, "focus_kept": foc}
+                tag = f"OVERFLOW +{r['overflow']}" if r["overflow"] else ""
+                print(f"  {name:44} total={r['total']:6} {tag:14} focus={foc}")
+    json.dump(report, open(os.path.join(out_dir, "materialize_report.json"), "w"), indent=2)
+    print(f"\nmaterialized {len(cells)} cells x {len(SEEDS)} seeds -> {out_dir}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Materialize the Wave-1 necessity-map cells.")
+    ap.add_argument("--pool", default="audit/results/stagec/phase1/pools/stagec_pool.jsonl")
+    ap.add_argument("--stage_a", default="audit/results/stagec/phase2/stage_a")
+    ap.add_argument("--out_dir", default="audit/results/stagec/phase2/matrix/subsets_wave1")
+    args = ap.parse_args()
+    pool = read_jsonl(args.pool)
+    materialize(args.stage_a, pool, args.out_dir, WAVE1)
+    print("NOTE: perplexity-low necessity cells are REUSED (Phase-1 language@10%, arm A "
+          "language@2%, arm C skill-IF@10%); random/full language refs reused from Phase 1.")
+
+
+if __name__ == "__main__":
+    main()
