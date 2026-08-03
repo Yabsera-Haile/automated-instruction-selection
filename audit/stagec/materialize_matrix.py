@@ -57,13 +57,16 @@ WAVE1 = [
 SEEDS = [0, 1, 2]
 
 
-def load_scores(selector, stage_a_dir, pool, seed):
-    """Return ({str(id): score}, higher_is_better). random is per-seed uniform."""
+def load_scores(selector, stage_a_dir, pool, seed, ppl_nlls):
+    """Return ({str(id): score}, higher_is_better). random is per-seed uniform. The perplexity
+    directions share ONE nlls.pkl -- it was scored in Wave 0 of Phase 1, so it lives at
+    `ppl_nlls` (phase1 stage_a), not under the phase2 stage_a dir."""
     if selector == "random":
         rng = random.Random(seed)
         return {str(r["id"]): rng.random() for r in pool}, True
     rel, mode = SPEC[selector]
-    raw = pickle.load(open(os.path.join(stage_a_dir, rel), "rb"))    # {pool_row_idx: val}
+    path = ppl_nlls if selector.startswith("perplexity") else os.path.join(stage_a_dir, rel)
+    raw = pickle.load(open(path, "rb"))                              # {pool_row_idx: val}
     idx2id = {r.get("pool_row_idx"): str(r["id"]) for r in pool}
     sc = {idx2id[k]: float(v) for k, v in raw.items() if k in idx2id}
     if mode == "low":
@@ -85,7 +88,7 @@ def cell_name(selector, axis, floor, budget):
             else f"{selector}__{axis}__{floor}__b{bp}")
 
 
-def materialize(stage_a_dir, pool, out_dir, cells):
+def materialize(stage_a_dir, pool, out_dir, cells, ppl_nlls):
     os.makedirs(out_dir, exist_ok=True)
     id2row = {str(r["id"]): r for r in pool}
     focus_of = {"language": DECISIVE, "skill": MOVABLE_SKILLS}
@@ -94,7 +97,7 @@ def materialize(stage_a_dir, pool, out_dir, cells):
         n_abs = load_nabs("skill") if axis == "skill" else 500
         k = round(budget * len(pool))
         for seed in SEEDS:
-            scores, hib = load_scores(selector, stage_a_dir, pool, seed)
+            scores, hib = load_scores(selector, stage_a_dir, pool, seed, ppl_nlls)
             protected = None
             if floor in ("absolute", "hybrid"):
                 qual, _ = qualifying_groups(pool, scores, hib, k, n_abs=n_abs,
@@ -124,10 +127,13 @@ def main():
     ap = argparse.ArgumentParser(description="Materialize the Wave-1 necessity-map cells.")
     ap.add_argument("--pool", default="audit/results/stagec/phase1/pools/stagec_pool.jsonl")
     ap.add_argument("--stage_a", default="audit/results/stagec/phase2/stage_a")
+    ap.add_argument("--ppl_nlls",
+                    default="audit/results/stagec/phase1/stage_a_work/ppl_work/nlls.pkl",
+                    help="perplexity nlls.pkl (scored in Phase-1 Wave 0; shared by low/high/mid).")
     ap.add_argument("--out_dir", default="audit/results/stagec/phase2/matrix/subsets_wave1")
     args = ap.parse_args()
     pool = read_jsonl(args.pool)
-    materialize(args.stage_a, pool, args.out_dir, WAVE1)
+    materialize(args.stage_a, pool, args.out_dir, WAVE1, args.ppl_nlls)
     print("NOTE: perplexity-low necessity cells are REUSED (Phase-1 language@10%, arm A "
           "language@2%, arm C skill-IF@10%); random/full language refs reused from Phase 1.")
 
