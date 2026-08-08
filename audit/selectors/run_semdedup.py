@@ -101,6 +101,50 @@ def _rank_diverse(indices: np.ndarray, dist_to_centroid: np.ndarray) -> np.ndarr
     return indices[np.argsort(-dist_to_centroid[indices])]
 
 
+# Score-adapter for the Stage-C rarity-aware wrapper (C2 Wave 2). SemDeDup's keep-priority is
+# "non-removable first, then farthest-from-centroid (most diverse) first". Encode it as one
+# per-example score: dist_to_centroid + BONUS*(not removable). BONUS exceeds max dist (<=2), so
+# non-removable always outranks removable; within each, larger dist ranks first. Top-k by this
+# score reproduces SemDeDup's native trim/pad selection exactly -> validatable, not a guess.
+SCORE_BONUS = 10.0
+
+
+def compute_scores(emb, n_clusters, threshold, seed):
+    removable, dist = semdedup(emb, n_clusters, threshold, seed)
+    return dist + SCORE_BONUS * (~removable).astype(np.float32)
+
+
+def dump_scores(metadata, index_path, out_path, threshold=DEFAULT_THRESHOLD,
+                n_clusters=DEFAULT_N_CLUSTERS, seed=0):
+    """Write {pool_row_idx: score} for the rarity-aware wrapper (higher = kept first)."""
+    import pickle
+    meta_df = pd.read_parquet(metadata).sort_values("pool_row_idx").reset_index(drop=True)
+    emb = load_index(index_path)
+    if len(emb) != len(meta_df):
+        raise ValueError(f"index rows {len(emb)} != metadata rows {len(meta_df)}")
+    scores = compute_scores(emb, n_clusters, threshold, seed)
+    d = {int(r): float(s) for r, s in zip(meta_df["pool_row_idx"], scores)}
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "wb") as f:
+        pickle.dump(d, f)
+    logger.info("dumped %d SemDeDup scores -> %s (higher=kept-first)", len(d), out_path)
+    return d, meta_df
+
+
+def validate_scores(scores_by_idx, meta_df, native_json):
+    """Top-k by the dumped score must reproduce SemDeDup's native selection ids (same params)."""
+    obj = json.load(open(native_json, encoding="utf-8"))
+    native, budget = set(obj["selected_ids"]), obj["budget"]
+    k = round(budget * len(meta_df))
+    idx2id = {int(r): str(i) for r, i in zip(meta_df["pool_row_idx"], meta_df["id"])}
+    topk = sorted(scores_by_idx, key=lambda i: scores_by_idx[i], reverse=True)[:k]
+    topk_ids = {idx2id[i] for i in topk if i in idx2id}
+    ov = len(topk_ids & native) / max(1, len(native))
+    logger.info("VALIDATE vs %s: budget=%.4f k=%d overlap=%.4f (expect ~1.0)",
+                os.path.basename(native_json), budget, k, ov)
+    return ov
+
+
 def generate(metadata: str, index_path: str, out_dir: str, dev: bool,
              threshold: float = DEFAULT_THRESHOLD, n_clusters: int = DEFAULT_N_CLUSTERS,
              seed: int = 0, budgets=BUDGETS) -> list[str]:
@@ -173,6 +217,11 @@ def main() -> None:
     ap.add_argument("--n_clusters", type=int, default=DEFAULT_N_CLUSTERS)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--dev", action="store_true")
+    ap.add_argument("--dump_scores", action="store_true",
+                    help="Write {pool_row_idx: score} for the rarity-aware wrapper (no selection).")
+    ap.add_argument("--scores_out", default=None)
+    ap.add_argument("--validate_against", default=None,
+                    help="A native semdedup__b*.json; checks top-k(score) reproduces it.")
     args = ap.parse_args()
 
     announce_dev(args.dev, logger)
@@ -185,6 +234,14 @@ def main() -> None:
         raise FileNotFoundError(
             f"RDS+ embedding index not found: {index_path}. Run RDS+ first "
             "(python -m audit.selectors.run_rdsplus" + (" --dev" if args.dev else "") + ").")
+
+    if args.dump_scores:
+        scores_out = args.scores_out or os.path.join(base, "semdedup_work", "semdedup_scores.pkl")
+        d, meta_df = dump_scores(args.metadata, index_path, scores_out, args.threshold,
+                                 args.n_clusters, args.seed)
+        if args.validate_against:
+            validate_scores(d, meta_df, args.validate_against)
+        return
 
     paths = generate(args.metadata, index_path, out_dir, args.dev,
                      threshold=args.threshold, n_clusters=args.n_clusters, seed=args.seed)

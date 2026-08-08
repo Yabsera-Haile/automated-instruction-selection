@@ -41,7 +41,10 @@ SPEC = {"perplexity-low": ("ppl_work/nlls.pkl", "low"),
         "perplexity-high": ("ppl_work/nlls.pkl", "high"),
         "perplexity-mid": ("ppl_work/nlls.pkl", "mid"),
         "quality": ("quality_work/quality_scores.pkl", "high"),
-        "ifd": ("ifd_work/ifd_scores.pkl", "high_finite")}
+        "ifd": ("ifd_work/ifd_scores.pkl", "high_finite"),
+        # SemDeDup: redundancy signal (distinct family). Score dumped by run_semdedup
+        # --dump_scores (higher = kept-first); higher_is_better=True reproduces its selection.
+        "semdedup": ("semdedup_work/semdedup_scores.pkl", "high")}
 
 # (selector, axis, floor, budget) -- axis ignored for none. perplexity-low cells are reused.
 WAVE1 = [
@@ -53,6 +56,16 @@ WAVE1 = [
     ("perplexity-high", "skill", "none", 0.10), ("perplexity-high", "skill", "proportional", 0.10),
     ("perplexity-high", "skill", "absolute", 0.10),
     ("random", "skill", "proportional", 0.10),
+]
+
+# Wave 2 (the one mechanistically-distinct eroder): SemDeDup (redundancy, not a score
+# threshold) on skill(math) -- turns the necessity map from "across perplexity/quality" into
+# "across signal families". SemDeDup removes redundant math -> deletion-prevention test, like
+# perplexity-high but via a different signal.
+WAVE2 = [
+    ("semdedup", "skill", "none", 0.10),
+    ("semdedup", "skill", "proportional", 0.10),
+    ("semdedup", "skill", "absolute", 0.10),
 ]
 SEEDS = [0, 1, 2]
 
@@ -130,12 +143,20 @@ def main():
     ap.add_argument("--ppl_nlls",
                     default="audit/results/stagec/phase1/stage_a_work/ppl_work/nlls.pkl",
                     help="perplexity nlls.pkl (scored in Phase-1 Wave 0; shared by low/high/mid).")
-    ap.add_argument("--out_dir", default="audit/results/stagec/phase2/matrix/subsets_wave1")
+    ap.add_argument("--wave", type=int, default=1, choices=[1, 2],
+                    help="1 = necessity map (perplexity/quality/random); 2 = SemDeDup skill(math).")
+    ap.add_argument("--out_dir", default=None)
     args = ap.parse_args()
     pool = read_jsonl(args.pool)
-    materialize(args.stage_a, pool, args.out_dir, WAVE1, args.ppl_nlls)
-    print("NOTE: perplexity-low necessity cells are REUSED (Phase-1 language@10%, arm A "
-          "language@2%, arm C skill-IF@10%); random/full language refs reused from Phase 1.")
+    cells = WAVE1 if args.wave == 1 else WAVE2
+    out_dir = args.out_dir or (f"audit/results/stagec/phase2/matrix/subsets_wave{args.wave}")
+    materialize(args.stage_a, pool, out_dir, cells, args.ppl_nlls)
+    if args.wave == 1:
+        print("NOTE: perplexity-low necessity cells are REUSED (Phase-1 language@10%, arm A "
+              "language@2%, arm C skill-IF@10%); random/full language refs reused from Phase 1.")
+    else:
+        print("NOTE: Wave 2 = SemDeDup skill(math) only; run_semdedup --dump_scores must have "
+              "produced semdedup_work/semdedup_scores.pkl first (validate it before materializing).")
 
 
 if __name__ == "__main__":
