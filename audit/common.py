@@ -85,14 +85,30 @@ GEMMA_CHAT_TEMPLATE = (
 )
 
 
+# Llama-3 user/assistant format (the official turn structure, minus system/tools headers we
+# don't use — a leading system turn is folded into the first user turn before templating). The
+# special tokens (<|begin_of_text|> = bos, <|start_header_id|>, <|end_header_id|>, <|eot_id|>)
+# are in the Llama-3.1 tokenizer's vocab even on the -pt base, which ships no chat_template.
+LLAMA3_CHAT_TEMPLATE = (
+    "{{ bos_token }}{% for message in messages %}"
+    "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' "
+    "+ message['content'] | trim + '<|eot_id|>' }}{% endfor %}"
+    "{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"
+)
+
+
 def ensure_chat_template(tok, model_id: str):
-    """If the tokenizer has no chat template (Gemma `-pt` bases don't), supply the model
-    family's official one so apply_chat_template works identically for train and eval.
-    Returns the tokenizer. Only fills a MISSING template; never overrides an existing one."""
+    """If the tokenizer has no chat template (Gemma `-pt` and Llama-3 `-pt` bases don't), supply
+    the model family's official one so apply_chat_template works identically for train and eval.
+    Returns the tokenizer. Only fills a MISSING template; never overrides an existing one (so an
+    instruct base like Aya keeps its own template)."""
     if getattr(tok, "chat_template", None):
         return tok
-    if "gemma" in model_id.lower():
+    mid = model_id.lower()
+    if "gemma" in mid:
         tok.chat_template = GEMMA_CHAT_TEMPLATE
+    elif "llama" in mid:
+        tok.chat_template = LLAMA3_CHAT_TEMPLATE
     return tok
 
 
