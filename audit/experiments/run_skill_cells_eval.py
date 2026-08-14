@@ -45,8 +45,10 @@ def parse_cell(tag):
 
 
 def eval_cell(tag, adapter, args):
-    margs = (f"pretrained={args.base_model},dtype=bfloat16,"
-             f"add_bos_token=True,attn_implementation=eager")
+    # Base-appropriate model_args: Gemma is at chance without add_bos_token=True; other families
+    # (Llama/Aya) add BOS via their own tokenizer/template, so forcing it double-BOSes -> empty.
+    extra = args.model_args_extra
+    margs = f"pretrained={args.base_model},dtype=bfloat16" + (f",{extra}" if extra else "")
     if adapter is not None:
         margs += f",peft={adapter},tokenizer={adapter}"
     apply_ct = adapter is not None
@@ -109,9 +111,15 @@ def main():
     ap.add_argument("--batch_size", type=int, default=8)
     ap.add_argument("--loglik_batch_size", type=int, default=2)
     ap.add_argument("--gpus", default="0,1,2")
+    ap.add_argument("--model_args_extra", default=None,
+                    help="Extra key=val,... for lm-eval --model_args. Default: Gemma gets "
+                         "'add_bos_token=True,attn_implementation=eager', other families get ''.")
     ap.add_argument("--assemble_only", action="store_true")
     ap.add_argument("--worker_tag", default=None)
     args = ap.parse_args()
+    if args.model_args_extra is None:
+        args.model_args_extra = ("add_bos_token=True,attn_implementation=eager"
+                                 if "gemma" in args.base_model.lower() else "")
     os.environ.setdefault("HF_ALLOW_CODE_EVAL", "1")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     bad = [b for b in args.benchmarks if b not in BENCH_BY_NAME]
@@ -143,7 +151,8 @@ def main():
                    "--ckpt_dir", args.ckpt_dir, "--out_root", args.out_root,
                    "--benchmarks", *args.benchmarks, "--limit", str(args.limit),
                    "--batch_size", str(args.batch_size),
-                   "--loglik_batch_size", str(args.loglik_batch_size)]
+                   "--loglik_batch_size", str(args.loglik_batch_size),
+                   "--model_args_extra", args.model_args_extra]
             running.append({"tag": tag, "gpu": gpu, "lf": lf,
                             "p": subprocess.Popen(cmd, env=env, stdout=lf,
                                                   stderr=subprocess.STDOUT)})
