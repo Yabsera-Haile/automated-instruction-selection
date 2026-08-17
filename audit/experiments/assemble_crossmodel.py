@@ -76,9 +76,11 @@ def collect(root):
     return rows
 
 
-def agg(df, base, selector, floor, metric):
-    s = df[(df.base == base) & (df.selector == selector) & (df.floor == floor)
-           & (df.metric == metric)]["value"]
+def agg(df, base, selector, purpose, floor, metric):
+    # MUST filter by purpose too: lang/ifeval/math cells share floor names, so filtering by
+    # floor alone mixes a language cell with an IFEval cell at the same floor.
+    s = df[(df.base == base) & (df.selector == selector) & (df.purpose == purpose)
+           & (df.floor == floor) & (df.metric == metric)]["value"]
     if s.empty:
         return None, None
     return round(s.mean(), 3), (round(statistics.pstdev(list(s)), 3) if len(s) > 1 else 0.0)
@@ -110,10 +112,10 @@ def main():
     hdr = f"{'selector':16} {'floor':13}" + "".join(f"{n:>18}" for n in names) + f"{'Gemma-4B':>12}"
     print(hdr)
     for selector in ("perplexity-low", "quality"):
-        for floor in ("none", "proportional", "absolute"):
+        for floor, purpose in (("none", "none"), ("proportional", "lang"), ("absolute", "lang")):
             line = f"{selector:16} {floor:13}"
             for n in names:
-                line += f"{cell(*agg(df, n, selector, floor, 'decisive_ppl')):>18}"
+                line += f"{cell(*agg(df, n, selector, purpose, floor, 'decisive_ppl')):>18}"
             g = GEMMA["lang"].get((selector, floor))
             line += f"{('%.2f' % g if g else '--'):>12}"
             print(line)
@@ -126,8 +128,8 @@ def main():
     print("=" * 92)
     print(f"{'selector':16} {'floor':13}{'Llama-3.1-8B':>18}{'Gemma-4B':>12}")
     for selector in ("perplexity-low", "perplexity-high", "quality"):
-        for floor in ("none", "proportional", "absolute"):
-            v, sd = agg(df, "Llama-3.1-8B", selector, floor, "ifeval")
+        for floor, purpose in (("none", "none"), ("proportional", "ifeval"), ("absolute", "ifeval")):
+            v, sd = agg(df, "Llama-3.1-8B", selector, purpose, floor, "ifeval")
             g = GEMMA["ifeval"].get((selector, floor))
             print(f"{selector:16} {floor:13}{cell(v, sd):>18}{('%.3f' % g if g else '--'):>12}")
 
@@ -136,14 +138,14 @@ def main():
           "Q: does ppl-high erode math below base, floor recover?")
     print("=" * 92)
     print(f"{'selector':16} {'floor':13}{'Llama-3.1-8B':>18}{'Gemma-4B':>12}")
-    for floor in ("none", "absolute"):
-        v, sd = agg(df, "Llama-3.1-8B", "perplexity-high", floor, "gsm8k")
+    for floor, purpose in (("none", "none"), ("absolute", "math")):
+        v, sd = agg(df, "Llama-3.1-8B", "perplexity-high", purpose, floor, "gsm8k")
         g = GEMMA["gsm8k"].get(("perplexity-high", floor))
         print(f"{'perplexity-high':16} {floor:13}{cell(v, sd):>18}{('%.3f' % g if g else '--'):>12}")
 
     # base anchors
-    print("\nBASE anchors (decisive macro ppl):", {n: agg(df, n, "base", "none", "decisive_ppl")[0]
-                                                   for n in names})
+    print("\nBASE anchors (decisive macro ppl):",
+          {n: agg(df, n, "base", "none", "none", "decisive_ppl")[0] for n in names})
 
 
 if __name__ == "__main__":
