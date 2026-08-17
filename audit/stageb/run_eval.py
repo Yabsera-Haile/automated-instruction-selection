@@ -50,6 +50,7 @@ METRIC_CANDIDATES = {
     "gsm8k": ["exact_match,strict-match", "exact_match,flexible-extract",
               "exact_match,none", "exact_match"],
     "mbpp": ["pass_at_1,none", "pass@1,none", "pass_at_1", "acc,none"],
+    "humaneval": ["pass_at_1,none", "pass@1,none", "pass@1,create_test", "pass_at_1", "pass@1"],
     "ifeval": ["prompt_level_strict_acc,none", "inst_level_strict_acc,none",
                "prompt_level_loose_acc,none"],
 }

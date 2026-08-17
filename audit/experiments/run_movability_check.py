@@ -40,10 +40,19 @@ BENCHMARKS = [
     ("gsm8k",     ["gsm8k"],     8,    "max_gen_toks=512", False, "math",
      "exact_match,strict-match"),
     ("mbpp",      ["mbpp"],      None, "max_gen_toks=256", True,  "code", None),
+    ("humaneval", ["humaneval"], None, "max_gen_toks=512", True,  "code", None),
     ("ifeval",    ["ifeval"],    None, "max_gen_toks=512", False, "instruction_following", None),
     ("mmlu",      ["mmlu"],      5,    None,               False, "general", None),
     ("mmlu_stem", ["mmlu_stem"], 5,    None,               False, "science/stem", None),
 ]
+
+
+def active_benchmarks(args):
+    """The BENCHMARKS to run this invocation (all, or the --benchmarks subset)."""
+    if not getattr(args, "benchmarks", None):
+        return BENCHMARKS
+    want = set(args.benchmarks)
+    return [b for b in BENCHMARKS if b[0] in want]
 
 
 def reference_models(ckpt_dir: str):
@@ -73,7 +82,7 @@ def eval_model(tag, adapter, args):
     out_path = os.path.join(args.out_root, "metrics", f"{tag}.json")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     results = json.load(open(out_path, encoding="utf-8")) if os.path.exists(out_path) else {}
-    for name, tasks, nfs, genkw, codex, _skill, _mk in BENCHMARKS:
+    for name, tasks, nfs, genkw, codex, _skill, _mk in active_benchmarks(args):
         if bench_metric(results, name) is not None:
             print(f"[{tag}] {name}: present, skip", flush=True)
             continue
@@ -95,7 +104,7 @@ def assemble(args):
         if not os.path.exists(p):
             continue
         results = json.load(open(p, encoding="utf-8"))
-        for name, *_ in BENCHMARKS:
+        for name, *_ in active_benchmarks(args):
             v = bench_metric(results, name)
             if v is not None:
                 scores.setdefault(name, {})[tag] = v
@@ -103,7 +112,7 @@ def assemble(args):
     rows, verdict = [], {}
     print(f"\n{'benchmark':11} {'skill':22} {'base':>7} {'full':>7} "
           f"{'rand_mean':>9} {'rand_sd':>8} {'spread':>7} {'noise':>7}  label")
-    for name, tasks, nfs, genkw, codex, skill, _mk in BENCHMARKS:
+    for name, tasks, nfs, genkw, codex, skill, _mk in active_benchmarks(args):
         s = scores.get(name, {})
         base = s.get("base")
         full = s.get("full__s0")
@@ -157,6 +166,9 @@ def main():
     ap.add_argument("--batch_size", type=int, default=8, help="Generation tasks (gsm8k/mbpp/ifeval).")
     ap.add_argument("--loglik_batch_size", type=int, default=2,
                     help="MMLU/MMLU-STEM loglik batch (small: 262k-vocab log_softmax OOMs at 8).")
+    ap.add_argument("--benchmarks", nargs="*", default=None,
+                    help=f"Subset of {[b[0] for b in BENCHMARKS]} (default: all). "
+                         "Part B code check: --benchmarks mbpp humaneval.")
     ap.add_argument("--gpus", default="0,1,2")
     ap.add_argument("--assemble_only", action="store_true")
     ap.add_argument("--worker_tag", default=None)
@@ -178,8 +190,9 @@ def main():
     gpus = [g.strip() for g in args.gpus.split(",") if g.strip()]
     log_dir = os.path.join(args.out_root, "logs")
     os.makedirs(log_dir, exist_ok=True)
+    active = active_benchmarks(args)
     print(f"Movability check: {len(refs)} reference models "
-          f"{[t for t, _ in refs]} x {len(BENCHMARKS)} benchmarks on {gpus}")
+          f"{[t for t, _ in refs]} x {[b[0] for b in active]} on {gpus}")
     pending, running = [t for t, _ in refs], []
     free = list(gpus)
     import time
@@ -193,6 +206,8 @@ def main():
                    "--ckpt_dir", args.ckpt_dir, "--out_root", args.out_root,
                    "--limit", str(args.limit), "--batch_size", str(args.batch_size),
                    "--loglik_batch_size", str(args.loglik_batch_size)]
+            if args.benchmarks:
+                cmd += ["--benchmarks", *args.benchmarks]
             running.append({"tag": tag, "gpu": gpu, "lf": lf,
                             "p": subprocess.Popen(cmd, env=env, stdout=lf,
                                                   stderr=subprocess.STDOUT)})
