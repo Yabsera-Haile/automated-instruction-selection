@@ -1,0 +1,75 @@
+{
+  "condition": "quality__lang__proportional__s0",
+  "base_model": "CohereForAI/aya-expanse-8b",
+  "adapter": "audit/results/crossmodel/aya-expanse-8b/checkpoints/quality__lang__proportional__s0",
+  "prompt": "",
+  "split": "devtest",
+  "languages": {
+    "ceb": {
+      "nll": 4.277712549513218,
+      "ppl": 72.07538243015391,
+      "n_tokens": 52492,
+      "n_sentences": 1012
+    },
+    "hau": {
+      "nll": 4.927068809164229,
+      "ppl": 137.9744894711842,
+      "n_tokens": 49750,
+      "n_sentences": 1012
+    },
+    "kir": {
+      "nll": 3.2616249634360153,
+      "ppl": 26.09190109851795,
+      "n_tokens": 64766,
+      "n_sentences": 1012
+    },
+    "mlt": {
+      "nll": 3.9914740951967036,
+      "ppl": 54.13463017442928,
+      "n_tokens": 61398,
+      "n_sentences": 1012
+    },
+    "plt": {
+      "nll": 4.58753414263378,
+      "ppl": 98.25185614517622,
+      "n_tokens": 58097,
+      "n_sentences": 1012
+    },
+    "som": {
+      "nll": 4.281135689552465,
+      "ppl": 72.32252932547446,
+      "n_tokens": 56137,
+      "n_sentences": 1012
+    },
+    "zul": {
+      "nll": 4.534487590051249,
+      "ppl": 93.17575888420168,
+      "n_tokens": 55422,
+      "n_sentences": 1012
+    },
+    "eng": {
+      "nll": 3.186336730889101,
+      "ppl": 24.1996151680402,
+      "n_tokens": 26955,
+      "n_sentences": 1012
+    },
+    "spa": {
+      "nll": 3.1484229450758154,
+      "ppl": 23.299291329724273,
+      "n_tokens": 33824,
+      "n_sentences": 1012
+    },
+    "cmn": {
+      "nll": 3.709499808126612,
+      "ppl": 40.83337689476245,
+      "n_tokens": 28071,
+      "n_sentences": 1012
+    },
+    "arb": {
+      "nll": 2.8210324910621853,
+      "ppl": 16.79418156596735,
+      "n_tokens": 39940,
+      "n_sentences": 1012
+    }
+  }
+}

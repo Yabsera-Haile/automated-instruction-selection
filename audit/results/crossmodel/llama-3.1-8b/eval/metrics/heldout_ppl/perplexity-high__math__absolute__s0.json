@@ -1,0 +1,75 @@
+{
+  "condition": "perplexity-high__math__absolute__s0",
+  "base_model": "meta-llama/Llama-3.1-8B",
+  "adapter": "audit/results/crossmodel/llama-3.1-8b/checkpoints/perplexity-high__math__absolute__s0",
+  "prompt": "",
+  "split": "devtest",
+  "languages": {
+    "ceb": {
+      "nll": 3.4400909122952252,
+      "ppl": 31.189793575142357,
+      "n_tokens": 51881,
+      "n_sentences": 1012
+    },
+    "hau": {
+      "nll": 3.2739342712652957,
+      "ppl": 26.41505918681008,
+      "n_tokens": 53580,
+      "n_sentences": 1012
+    },
+    "kir": {
+      "nll": 2.067131968464343,
+      "ppl": 7.902127037327743,
+      "n_tokens": 78800,
+      "n_sentences": 1012
+    },
+    "mlt": {
+      "nll": 2.618511743487177,
+      "ppl": 13.715296509128844,
+      "n_tokens": 65207,
+      "n_sentences": 1012
+    },
+    "plt": {
+      "nll": 3.387858755550242,
+      "ppl": 29.602498174332982,
+      "n_tokens": 60524,
+      "n_sentences": 1012
+    },
+    "som": {
+      "nll": 3.794517860582739,
+      "ppl": 44.456796863386884,
+      "n_tokens": 59415,
+      "n_sentences": 1012
+    },
+    "zul": {
+      "nll": 3.5337356475696016,
+      "ppl": 34.251681129258806,
+      "n_tokens": 59413,
+      "n_sentences": 1012
+    },
+    "eng": {
+      "nll": 3.2665025001288046,
+      "ppl": 26.21947617665158,
+      "n_tokens": 27171,
+      "n_sentences": 1012
+    },
+    "spa": {
+      "nll": 2.6950537733066104,
+      "ppl": 14.806314916393143,
+      "n_tokens": 41843,
+      "n_sentences": 1012
+    },
+    "cmn": {
+      "nll": 3.251056280116382,
+      "ppl": 25.81759613300752,
+      "n_tokens": 34808,
+      "n_sentences": 1012
+    },
+    "arb": {
+      "nll": 2.919786705762105,
+      "ppl": 18.537333131701235,
+      "n_tokens": 44905,
+      "n_sentences": 1012
+    }
+  }
+}
