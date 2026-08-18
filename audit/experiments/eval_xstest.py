@@ -65,6 +65,27 @@ def reference_models(ckpt_dir: str):
     return refs
 
 
+def cells(ckpt_dir: str):
+    """base + every trained adapter cell in ckpt_dir (B-Step 2 safety-necessity cells)."""
+    out = [("base", None)]
+    for d in sorted(glob.glob(os.path.join(ckpt_dir, "*"))):
+        if os.path.isdir(d) and os.path.exists(os.path.join(d, "adapter_config.json")):
+            out.append((os.path.basename(d), d))
+    return out
+
+
+def parse_cell(tag: str):
+    if tag == "base":
+        return "base", 0
+    body, _, seed = tag.rpartition("__s")
+    mode = body.split("__", 1)[1] if "__" in body else body
+    return mode, (int(seed) if seed.isdigit() else 0)
+
+
+def models_to_eval(args):
+    return cells(args.ckpt_dir) if args.eval_cells else reference_models(args.ckpt_dir)
+
+
 def load_xstest(limit=None):
     """(items, dataset_id) where items = [(prompt, 'safe'|'unsafe')]. Robust to schema: prefer an
     explicit safe/unsafe label column; else derive from v2 'type' (contrast_* == unsafe)."""
@@ -201,6 +222,38 @@ def assemble(args):
     print(f"-> {os.path.join(args.out_root, 'xstest_movability.json')}")
 
 
+def assemble_cells(args):
+    """B-Step 2: per-cell XSTest sub-scores grouped by floor mode (none/code__*/safety__*),
+    mean +- SD across seeds. Safety is a calibration shift -- print BOTH sub-scores together."""
+    import pandas as pd
+    rows = []
+    for p in sorted(glob.glob(os.path.join(args.out_root, "metrics", "*.json"))):
+        rec = json.load(open(p, encoding="utf-8"))
+        tag = os.path.splitext(os.path.basename(p))[0]
+        mode, seed = parse_cell(tag)
+        for sub, key, _ in SUBSCORES:
+            if rec.get(key) is not None:
+                rows.append([tag, mode, seed, sub, rec[key]])
+    df = pd.DataFrame(rows, columns=["cell", "mode", "seed", "subscore", "value"])
+    os.makedirs(args.out_root, exist_ok=True)
+    df.to_parquet(os.path.join(args.out_root, "xstest_cells_results.parquet"), index=False)
+    print(f"\nAssembled {len(df)} rows -> {args.out_root}/xstest_cells_results.parquet")
+    print("SAFETY IS NOT MONOTONIC — read the two sub-scores together (refusal-calibration "
+          "shift, not capability recovery).")
+    order = ["base", "none", "proportional", "absolute"]
+    for sub, key, interp in SUBSCORES:
+        s = df[df.subscore == sub]
+        if s.empty:
+            continue
+        print(f"\n=== {sub} ({interp}; mean +- SD across seeds) ===")
+        g = s.groupby("mode")["value"]
+        modes = [m for m in order if m in g.groups] + [m for m in sorted(g.groups) if m not in order]
+        for m in modes:
+            v = list(g.get_group(m))
+            print(f"  {m:26} {sum(v) / len(v):.3f} +- "
+                  f"{statistics.pstdev(v) if len(v) > 1 else 0:.3f}  (n={len(v)})")
+
+
 def selftest():
     ok = ["I'm sorry, but I can't help with that.", "I cannot assist with this request.",
           "As an AI, I will not provide instructions for that."]
@@ -220,6 +273,9 @@ def main():
     ap.add_argument("--max_new_tokens", type=int, default=256)
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--gpus", default="0,1,2")
+    ap.add_argument("--eval_cells", action="store_true",
+                    help="Eval EVERY adapter cell in --ckpt_dir (B-Step 2 safety-necessity cells) "
+                         "and assemble per-mode, instead of the base/full/random movability refs.")
     ap.add_argument("--assemble_only", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--worker_tag", default=None)
@@ -231,9 +287,9 @@ def main():
         selftest()
         return
     if args.assemble_only:
-        assemble(args)
+        (assemble_cells if args.eval_cells else assemble)(args)
         return
-    refs = reference_models(args.ckpt_dir)
+    refs = models_to_eval(args)
     if args.worker_tag is not None:
         for tag, adapter in refs:
             if tag == args.worker_tag:
@@ -243,7 +299,8 @@ def main():
     gpus = [g.strip() for g in args.gpus.split(",") if g.strip()]
     log_dir = os.path.join(args.out_root, "logs")
     os.makedirs(log_dir, exist_ok=True)
-    print(f"XSTest movability: {len(refs)} reference models {[t for t, _ in refs]} on {gpus}")
+    print(f"XSTest {'cells' if args.eval_cells else 'movability'}: {len(refs)} models "
+          f"{[t for t, _ in refs] if len(refs) <= 8 else str(len(refs)) + ' cells'} on {gpus}")
     pending, running, free = [t for t, _ in refs], [], list(gpus)
     while pending or running:
         while free and pending:
@@ -255,6 +312,8 @@ def main():
                    "--ckpt_dir", args.ckpt_dir, "--out_root", args.out_root,
                    "--max_new_tokens", str(args.max_new_tokens),
                    "--batch_size", str(args.batch_size)]
+            if args.eval_cells:
+                cmd.append("--eval_cells")
             if args.limit:
                 cmd += ["--limit", str(args.limit)]
             running.append({"tag": tag, "gpu": gpu, "lf": lf,
@@ -273,7 +332,7 @@ def main():
         running = still
         if running and not prog:
             time.sleep(5)
-    assemble(args)
+    (assemble_cells if args.eval_cells else assemble)(args)
 
 
 if __name__ == "__main__":
