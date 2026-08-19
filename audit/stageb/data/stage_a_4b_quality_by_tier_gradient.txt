@@ -1,0 +1,9 @@
+slope_per_tier=0.2633
+low_0_2_mean=2.8907
+high_5_mean=4.0451
+low_high_contrast=1.1545
+multilingual_mean=3.0922
+nonmultilingual_mean=4.0350
+ml_contrast=-0.9428
+n_scored=10842
+scores_pickle=audit/results/quality_work/quality_scores.pkl
