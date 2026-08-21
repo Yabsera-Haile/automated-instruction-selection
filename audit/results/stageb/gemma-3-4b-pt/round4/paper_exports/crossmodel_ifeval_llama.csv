@@ -1,0 +1,10 @@
+selector,floor,ifeval_strict,sd,seeds
+perplexity-low,none,0.16,0.01,3
+perplexity-low,proportional,0.3,0.01,3
+perplexity-low,absolute,0.33,0.02,3
+perplexity-high,none,0.17,0.01,3
+perplexity-high,proportional,0.24,0.01,3
+perplexity-high,absolute,0.33,0.01,3
+quality,none,0.3,0.02,3
+quality,proportional,0.29,0.01,3
+quality,absolute,0.31,0.01,3

@@ -1,0 +1,13 @@
+base,selector,floor,decisive_macro_ppl,sd,seeds
+Aya-Expanse-8B,perplexity-low,none,246.56,0.49,3
+Aya-Expanse-8B,perplexity-low,proportional,88.46,0.48,3
+Aya-Expanse-8B,perplexity-low,absolute,78.75,0.1,3
+Aya-Expanse-8B,quality,none,136.39,0.35,3
+Aya-Expanse-8B,quality,proportional,79.3,0.53,3
+Aya-Expanse-8B,quality,absolute,66.01,0.21,3
+Llama-3.1-8B,perplexity-low,none,44.23,0.68,3
+Llama-3.1-8B,perplexity-low,proportional,28.28,0.2,3
+Llama-3.1-8B,perplexity-low,absolute,24.68,0.05,3
+Llama-3.1-8B,quality,none,32.08,0.23,3
+Llama-3.1-8B,quality,proportional,28.76,0.05,3
+Llama-3.1-8B,quality,absolute,24.28,0.14,3

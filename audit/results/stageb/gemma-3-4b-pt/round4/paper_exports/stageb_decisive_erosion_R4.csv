@@ -1,0 +1,11 @@
+selector,budget,decisive_macro_ppl,sd,seeds,delta_vs_random
+base,0.0,39.31,0.0,1,
+full,1.0,28.17,0.0,1,
+random,0.1,27.94,0.01,3,0.0
+perplexity-low,0.1,37.31,0.72,3,9.36
+perplexity-high,0.1,29.18,0.0,1,1.24
+quality,0.1,35.01,0.0,1,7.07
+random,0.25,27.58,0.09,3,0.0
+perplexity-low,0.25,35.23,0.64,3,7.65
+perplexity-high,0.25,26.34,0.0,1,-1.25
+quality,0.25,30.12,0.0,1,2.54
