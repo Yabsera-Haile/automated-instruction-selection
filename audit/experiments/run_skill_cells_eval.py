@@ -114,6 +114,9 @@ def main():
     ap.add_argument("--model_args_extra", default=None,
                     help="Extra key=val,... for lm-eval --model_args. Default: Gemma gets "
                          "'add_bos_token=True,attn_implementation=eager', other families get ''.")
+    ap.add_argument("--only", nargs="*", default=None,
+                    help="Substring filter: eval only cells whose tag contains any of these "
+                         "(e.g. --only perplexity-low__none). Skips base unless it matches.")
     ap.add_argument("--assemble_only", action="store_true")
     ap.add_argument("--worker_tag", default=None)
     args = ap.parse_args()
@@ -135,6 +138,10 @@ def main():
             if tag == args.worker_tag:
                 eval_cell(tag, adapter, args)
         return
+    if args.only:
+        todo = [(t, a) for t, a in todo if any(o in t for o in args.only)]
+        if not todo:
+            raise SystemExit(f"--only {args.only} matched no cells in {args.ckpt_dir}")
 
     gpus = [g.strip() for g in args.gpus.split(",") if g.strip()]
     log_dir = os.path.join(args.out_root, "logs")
